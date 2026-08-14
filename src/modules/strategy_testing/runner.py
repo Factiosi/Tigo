@@ -52,6 +52,7 @@ class StrategyTestRunner:
         self._stop_requested = False
         self._completed_lock = threading.Lock()
         self._completed_strategy_ids: list[str] = []
+        self._planned_strategy_ids: list[str] = []
         self._phase: TestPhase = "idle"
         self._active_strategy_id: str | None = None
         self._version: str | None = None
@@ -70,6 +71,11 @@ class StrategyTestRunner:
     def completed_strategy_ids(self) -> list[str]:
         with self._completed_lock:
             return list(self._completed_strategy_ids)
+
+    @property
+    def planned_strategy_ids(self) -> list[str]:
+        with self._completed_lock:
+            return list(self._planned_strategy_ids)
 
     @property
     def phase(self) -> TestPhase:
@@ -108,6 +114,7 @@ class StrategyTestRunner:
         self._version = job.version
         with self._completed_lock:
             self._completed_strategy_ids.clear()
+            self._planned_strategy_ids = list(job.strategy_ids)
         debug("strategy_testing", f"starting tests: {job.strategy_ids}")
 
         def runner() -> None:

@@ -33,7 +33,7 @@ from src.ui.components import (
     set_pill_disabled,
     ui_text,
 )
-from src.ui.probe_table import build_probe_table, factiosi_spinner
+from src.ui.probe_table import ProbeTableView, factiosi_spinner
 from src.ui.strategy_status import strategy_actions_disabled, strategy_status_pill
 
 
@@ -47,19 +47,21 @@ def _should_build_probe_table(strategy_id: str) -> bool:
     return True
 
 
-def test_expanded_state(
+def compute_expanded_state(
     *,
     running: bool,
     current_strategy_id: str | None,
     session_active: bool,
+    planned_strategy_ids: set[str],
     completed_strategy_ids: set[str],
     current_expanded: set[str],
 ) -> set[str]:
     """Pure expansion policy used by the daemon polling state machine."""
+    session_completed = completed_strategy_ids & planned_strategy_ids
     if running and current_strategy_id:
         return {current_strategy_id}
     if not running and session_active:
-        return set(completed_strategy_ids)
+        return session_completed
     return set(current_expanded)
 
 
@@ -76,6 +78,7 @@ class StrategiesPage:
         self._test_phase = "idle"
         self._focused_strategy_id: str | None = None
         self._session_completed: set[str] = set()
+        self._session_planned: set[str] = set()
         self._session_active = False
         self._selected: set[str] = set()
         self._expanded: set[str] = set()
@@ -93,6 +96,7 @@ class StrategiesPage:
         self._strategies_by_id: dict[str, Strategy] = {}
         self._row_index: dict[str, int] = {}
         self._probe_body_by_id: dict[str, ft.Container] = {}
+        self._probe_table_by_id: dict[str, ProbeTableView] = {}
         self._chevron_by_id: dict[str, ft.Icon] = {}
         self._probe_dirty: set[str] = set()
         self._probe_flush_timer: threading.Timer | None = None
@@ -141,6 +145,7 @@ class StrategiesPage:
         rows: list[ft.Control] = []
         self._row_index.clear()
         self._probe_body_by_id.clear()
+        self._probe_table_by_id.clear()
         self._chevron_by_id.clear()
 
         if not self._strategies:
@@ -154,15 +159,20 @@ class StrategiesPage:
         self._strategy_list.controls = rows
         self._update_buttons()
 
-    def _probe_content_for(self, strategy_id: str) -> ft.Control | None:
-        if not _should_build_probe_table(strategy_id):
-            return None
+    def _probe_table_for(self, strategy_id: str) -> ProbeTableView:
+        view = self._probe_table_by_id.get(strategy_id)
+        if view is None:
+            view = ProbeTableView(strategy_id)
+            self._probe_table_by_id[strategy_id] = view
+        return view
+
+    def _probe_actions_for(self, strategy_id: str) -> ft.Row:
         disabled = strategy_actions_disabled(
             strategy_id,
             selected_strategy=get_settings().selected_strategy,
             tests_running=self._tests_running,
         )
-        actions = ft.Row(
+        return ft.Row(
             [
                 pill_button(
                     "Выбрать стратегию",
@@ -179,7 +189,30 @@ class StrategiesPage:
             spacing=8,
             wrap=True,
         )
-        return ft.Column([build_probe_table(strategy_id), actions], spacing=10, tight=True)
+
+    def _refresh_strategy_action_buttons(self) -> None:
+        for strategy_id in self._expanded:
+            body = self._probe_body_by_id.get(strategy_id)
+            if not body:
+                continue
+            content = self._probe_content_for(strategy_id)
+            if content is None:
+                continue
+            body.content = content
+            if body.page:
+                try:
+                    body.update()
+                except RuntimeError:
+                    pass
+
+    def _probe_content_for(self, strategy_id: str) -> ft.Control | None:
+        if not _should_build_probe_table(strategy_id):
+            return None
+        return ft.Column(
+            [self._probe_table_for(strategy_id).control, self._probe_actions_for(strategy_id)],
+            spacing=10,
+            tight=True,
+        )
 
     def _update_probe_only(self, strategy_id: str) -> None:
         body = self._probe_body_by_id.get(strategy_id)
@@ -187,7 +220,11 @@ class StrategiesPage:
             return
         if not _should_build_probe_table(strategy_id):
             return
-        body.content = self._probe_content_for(strategy_id)
+        view = self._probe_table_by_id.get(strategy_id)
+        if view is None:
+            body.content = self._probe_content_for(strategy_id)
+        else:
+            view.sync(strategy_id)
         if body.page:
             try:
                 body.update()
@@ -521,21 +558,21 @@ class StrategiesPage:
             return
         settings = get_settings()
         if settings.selected_strategy == strategy_id:
+            self._snack("Стратегия уже выбрана.")
             return
         settings.selected_strategy = strategy_id
         save_settings(settings)
-        self._refresh_list()
+        self._refresh_strategy_action_buttons()
         self._snack("Стратегия выбрана.")
 
     def _choose_and_start(self, strategy_id: str) -> None:
         if self._tests_running or not tr.is_tested(strategy_id):
             return
         settings = get_settings()
-        if settings.selected_strategy == strategy_id:
-            return
-        settings.selected_strategy = strategy_id
-        save_settings(settings)
-        self._refresh_list()
+        if settings.selected_strategy != strategy_id:
+            settings.selected_strategy = strategy_id
+            save_settings(settings)
+            self._refresh_strategy_action_buttons()
 
         def work() -> None:
             status = get_effective_runtime_status()
@@ -544,9 +581,9 @@ class StrategiesPage:
                 if not stopped:
                     result = (False, message)
                 else:
-                    result = daemon_start()
+                    result = daemon_start(strategy_id)
             else:
-                result = daemon_start()
+                result = daemon_start(strategy_id)
             self._ui(lambda: self._snack(result[1], error=not result[0]))
 
         threading.Thread(
@@ -561,6 +598,7 @@ class StrategiesPage:
             return
         self._seen_daemon_completed.clear()
         self._session_completed.clear()
+        self._session_planned = set(self._selected)
         self._session_active = True
         self._last_daemon_current = None
         self._update_buttons()
@@ -576,6 +614,7 @@ class StrategiesPage:
                 self._tests_running = ok
                 if not ok:
                     self._session_active = False
+                    self._session_planned.clear()
                 self._update_buttons()
                 if self._status_text:
                     self._status_text.value = msg if ok else f"Ошибка: {msg}"
@@ -625,6 +664,13 @@ class StrategiesPage:
                 self._tests_running = running
                 if running:
                     self._session_active = True
+                planned_raw = state.get("planned_strategy_ids")
+                if isinstance(planned_raw, list):
+                    daemon_planned = {
+                        str(value) for value in planned_raw if isinstance(value, str) and value
+                    }
+                    if daemon_planned:
+                        self._session_planned = daemon_planned
                 completed_raw = state.get("completed_strategy_ids")
                 completed = (
                     {str(value) for value in completed_raw if isinstance(value, str)}
@@ -635,8 +681,12 @@ class StrategiesPage:
                 for strategy_id in newly_completed:
                     tr.reload_strategy(strategy_id)
                 self._seen_daemon_completed.update(completed)
-                self._session_completed.update(completed)
-                layout_changed = layout_changed or bool(newly_completed)
+                session_completed = completed & self._session_planned
+                if session_completed != self._session_completed:
+                    self._session_completed = session_completed
+                    layout_changed = True
+                elif newly_completed:
+                    layout_changed = True
 
                 version_raw = state.get("version")
                 version = str(version_raw) if version_raw else None
@@ -658,15 +708,17 @@ class StrategiesPage:
 
                 self._focused_strategy_id = current
                 self._test_phase = phase
-                desired_expanded = test_expanded_state(
+                desired_expanded = compute_expanded_state(
                     running=running,
                     current_strategy_id=current,
                     session_active=self._session_active,
+                    planned_strategy_ids=self._session_planned,
                     completed_strategy_ids=self._session_completed,
                     current_expanded=self._expanded,
                 )
                 if not running and self._session_active:
                     self._session_active = False
+                    self._session_planned.clear()
                 if desired_expanded != self._expanded:
                     self._expanded = desired_expanded
                     layout_changed = True

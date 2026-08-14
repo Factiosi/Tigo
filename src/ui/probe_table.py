@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 import flet as ft
 
@@ -16,6 +17,14 @@ TLS_WIDTH = 62
 PING_WIDTH = 72
 PROBE_FONT_SIZE = 12
 _LABEL_COLOR = T.TEXT_MUTED
+
+CellKey = tuple[str, str]
+MetricField = Literal["http", "tls12", "tls13"]
+_METRIC_FIELDS: tuple[tuple[MetricField, str, int], ...] = (
+    ("http", "HTTP", HTTP_WIDTH),
+    ("tls12", "TLS1.2", TLS_WIDTH),
+    ("tls13", "TLS1.3", TLS_WIDTH),
+)
 
 
 def factiosi_spinner(*, size: int = 11) -> ft.ProgressRing:
@@ -102,82 +111,158 @@ def _labeled_value(label: str, value: str, *, value_color: str) -> ft.Control:
     )
 
 
-def _metric_cell(label: str, cell: tr.ProbeCell, *, width: int) -> ft.Container:
-    if cell.phase == "loading":
-        content: ft.Control = ft.Row(
-            [
-                ui_text(f"{label}:", size=PROBE_FONT_SIZE, color=_LABEL_COLOR, no_wrap=True),
-                factiosi_spinner(size=10),
-            ],
-            spacing=4,
-            tight=True,
-        )
-    elif cell.phase == "pending" or cell.text == "?":
-        content = _labeled_value(label, "?", value_color=T.TEXT_FAINT)
-    else:
-        value = _short_token(cell.text)
-        content = _labeled_value(label, value, value_color=_token_color(cell.text))
-    return ft.Container(content=content, width=width)
-
-
-def _ping_cell(cell: tr.ProbeCell) -> ft.Container:
-    if cell.phase == "loading":
-        content: ft.Control = ft.Row(
-            [
-                ui_text("Ping:", size=PROBE_FONT_SIZE, color=_LABEL_COLOR, no_wrap=True),
-                factiosi_spinner(size=10),
-            ],
-            spacing=4,
-            tight=True,
-        )
-    elif cell.phase == "pending" or cell.text in {"?", "? ms"}:
-        content = _labeled_value("Ping", "?", value_color=T.TEXT_FAINT)
-    else:
-        ping = cell.text.replace(" ", "")
-        content = _labeled_value("Ping", ping, value_color=_ping_value_color(cell.text))
-    return ft.Container(content=content, width=PING_WIDTH)
-
-
-def _probe_row(row: tr.ProbeTableRow) -> ft.Control:
-    cells: list[ft.Control] = [
-        ft.Container(
-            content=ui_text(row.name, size=PROBE_FONT_SIZE, color=T.TEXT, no_wrap=True),
-            width=NAME_WIDTH,
-        ),
-    ]
-    if row.http is not None:
-        cells.extend(
-            [
-                _metric_cell("HTTP", row.http, width=HTTP_WIDTH),
-                _metric_cell("TLS1.2", row.tls12, width=TLS_WIDTH),
-                _metric_cell("TLS1.3", row.tls13, width=TLS_WIDTH),
-            ]
-        )
-    cells.append(_ping_cell(row.ping))
-    return ft.Container(
-        content=ft.Row(cells, spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding.symmetric(vertical=2),
+def _loading_content(label: str, spinner: ft.ProgressRing) -> ft.Control:
+    return ft.Row(
+        [
+            ui_text(f"{label}:", size=PROBE_FONT_SIZE, color=_LABEL_COLOR, no_wrap=True),
+            spinner,
+        ],
+        spacing=4,
+        tight=True,
     )
+
+
+def _value_content(label: str, cell: tr.ProbeCell, *, ping: bool = False) -> ft.Control:
+    if ping:
+        if cell.phase == "pending" or cell.text in {"?", "? ms"}:
+            return _labeled_value("Ping", "?", value_color=T.TEXT_FAINT)
+        ping_value = cell.text.replace(" ", "")
+        return _labeled_value("Ping", ping_value, value_color=_ping_value_color(cell.text))
+
+    if cell.phase == "pending" or cell.text == "?":
+        return _labeled_value(label, "?", value_color=T.TEXT_FAINT)
+    value = _short_token(cell.text)
+    return _labeled_value(label, value, value_color=_token_color(cell.text))
+
+
+class ProbeTableView:
+    """Mutable probe table that reuses spinner controls between sync calls."""
+
+    def __init__(self, strategy_id: str) -> None:
+        self._strategy_id = strategy_id
+        self._table = ft.Column(spacing=0, tight=True)
+        self._root: ft.Control = self._table
+        self._row_by_name: dict[str, ft.Container] = {}
+        self._cell_containers: dict[CellKey, ft.Container] = {}
+        self._spinners: dict[CellKey, ft.ProgressRing] = {}
+        self._row_order: list[str] = []
+        self.sync(strategy_id)
+
+    @property
+    def control(self) -> ft.Control:
+        return self._root
+
+    def sync(self, strategy_id: str | None = None) -> None:
+        sid = strategy_id or self._strategy_id
+        self._strategy_id = sid
+        rows = tr.get_probe_table(sid) or tr.default_probe_table()
+        item = tr.get_result(sid)
+        if item and item.detail.strip() and not tr.get_probe_table(sid):
+            self._root = ft.Column(
+                [
+                    ui_text(item.detail.strip(), size=PROBE_FONT_SIZE, color=T.STATUS_ERROR),
+                    self._table,
+                ],
+                spacing=6,
+                tight=True,
+            )
+        elif self._root is not self._table:
+            self._root = self._table
+
+        names = [row.name for row in rows]
+        if names != self._row_order:
+            self._rebuild_rows(rows)
+            return
+        for row in rows:
+            self._sync_row(row)
+
+    def _rebuild_rows(self, rows: list[tr.ProbeTableRow]) -> None:
+        self._table.controls.clear()
+        self._row_by_name.clear()
+        self._cell_containers.clear()
+        self._spinners.clear()
+        self._row_order = [row.name for row in rows]
+        for row in rows:
+            row_container = self._build_row(row)
+            self._row_by_name[row.name] = row_container
+            self._table.controls.append(row_container)
+
+    def _build_row(self, row: tr.ProbeTableRow) -> ft.Container:
+        cells: list[ft.Control] = [
+            ft.Container(
+                content=ui_text(row.name, size=PROBE_FONT_SIZE, color=T.TEXT, no_wrap=True),
+                width=NAME_WIDTH,
+            )
+        ]
+        if row.http is not None:
+            for field, label, width in _METRIC_FIELDS:
+                cell = getattr(row, field)
+                cells.append(self._ensure_cell((row.name, field), cell, label, width))
+        cells.append(self._ensure_cell((row.name, "ping"), row.ping, "Ping", PING_WIDTH, ping=True))
+        return ft.Container(
+            content=ft.Row(
+                cells,
+                spacing=4,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding.symmetric(vertical=2),
+        )
+
+    def _sync_row(self, row: tr.ProbeTableRow) -> None:
+        if row.http is not None:
+            for field, label, width in _METRIC_FIELDS:
+                cell = getattr(row, field)
+                self._sync_cell((row.name, field), cell, label, width)
+        self._sync_cell((row.name, "ping"), row.ping, "Ping", PING_WIDTH, ping=True)
+
+    def _ensure_cell(
+        self,
+        key: CellKey,
+        cell: tr.ProbeCell,
+        label: str,
+        width: int,
+        *,
+        ping: bool = False,
+    ) -> ft.Container:
+        if cell.phase == "loading":
+            spinner = factiosi_spinner(size=10)
+            self._spinners[key] = spinner
+            content: ft.Control = _loading_content(label, spinner)
+        else:
+            content = _value_content(label, cell, ping=ping)
+        container = ft.Container(content=content, width=width)
+        self._cell_containers[key] = container
+        return container
+
+    def _sync_cell(
+        self,
+        key: CellKey,
+        cell: tr.ProbeCell,
+        label: str,
+        width: int,
+        *,
+        ping: bool = False,
+    ) -> None:
+        container = self._cell_containers.get(key)
+        if container is None:
+            row = self._row_by_name.get(key[0])
+            if row is None:
+                return
+            self._ensure_cell(key, cell, label, width, ping=ping)
+            return
+
+        if cell.phase == "loading":
+            if key in self._spinners:
+                return
+            spinner = factiosi_spinner(size=10)
+            self._spinners[key] = spinner
+            container.content = _loading_content(label, spinner)
+            return
+
+        self._spinners.pop(key, None)
+        container.content = _value_content(label, cell, ping=ping)
 
 
 def build_probe_table(strategy_id: str) -> ft.Control:
-    item = tr.get_result(strategy_id)
-    rows = tr.get_probe_table(strategy_id)
-    if not rows:
-        rows = tr.default_probe_table()
-
-    table = ft.Column(
-        [_probe_row(row) for row in rows],
-        spacing=0,
-        tight=True,
-    )
-    if item and item.detail.strip() and not tr.get_probe_table(strategy_id):
-        return ft.Column(
-            [
-                ui_text(item.detail.strip(), size=PROBE_FONT_SIZE, color=T.STATUS_ERROR),
-                table,
-            ],
-            spacing=6,
-            tight=True,
-        )
-    return table
+    return ProbeTableView(strategy_id).control

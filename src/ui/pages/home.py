@@ -70,10 +70,26 @@ class HomePage:
         self._start_btn: ft.Control | None = None
         self._stop_btn: ft.Control | None = None
 
+    def _sync_selected_strategy(self) -> None:
+        settings = get_settings()
+        strategies = list_strategies()
+        known = {strategy.id for strategy in strategies}
+        if self._selected_strategy_id in known:
+            selected = self._selected_strategy_id
+        elif settings.selected_strategy in known:
+            selected = settings.selected_strategy or ""
+        else:
+            selected = strategies[0].id if strategies else ""
+        self._selected_strategy_id = selected
+        if settings.selected_strategy != selected:
+            settings.selected_strategy = selected or None
+            save_settings(settings)
+
     def build(self) -> ft.Control:
         bootstrap_user_lists()
         settings = get_settings()
         is_custom = settings.strategy_source == "custom"
+        self._sync_selected_strategy()
 
         self._start_btn = pill_button("Запуск", primary=True, on_click=self._start)
         self._stop_btn = pill_button("Остановка", on_click=self._stop)
@@ -117,7 +133,7 @@ class HomePage:
             strategies = list_strategies()
             has_strategies = bool(strategies)
             if not self._selected_strategy_id and strategies:
-                self._selected_strategy_id = strategies[0].id
+                self._sync_selected_strategy()
 
             strategy_options = (
                 [(s.id, s.display_name) for s in strategies]
@@ -165,6 +181,10 @@ class HomePage:
 
     def _update_action_buttons(self) -> None:
         if not self._start_btn or not self._stop_btn:
+            return
+        if self._busy:
+            self._start_btn.disabled = True
+            self._stop_btn.disabled = True
             return
         status = self._resolve_status()
         starting = status.phase == RuntimePhase.STARTING
@@ -221,6 +241,8 @@ class HomePage:
         return get_effective_runtime_status()
 
     def _refresh_status(self, *, only_if_changed: bool = False) -> None:
+        if self._busy:
+            return
         status = self._resolve_status()
         running = status.running
         if (
@@ -257,6 +279,11 @@ class HomePage:
         self.page.snack_bar.open = True
         self.page.update()
 
+    def _show_transition_status(self, label: str) -> None:
+        self._status_row.controls = [status_pill("offline", label)]
+        self._update_action_buttons()
+        self.page.update()
+
     def _run_bg(self, work, on_done) -> None:
         if self._busy:
             return
@@ -283,6 +310,7 @@ class HomePage:
         threading.Thread(target=runner, daemon=True).start()
 
     def _find_strategy(self) -> Strategy | None:
+        self._sync_selected_strategy()
         for strategy in list_strategies():
             if strategy.id == self._selected_strategy_id:
                 return strategy
@@ -292,6 +320,7 @@ class HomePage:
     def _start(self, _: ft.ControlEvent) -> None:
         if self._busy:
             return
+        self._sync_selected_strategy()
         if not is_daemon_running():
             self._show_message("Фоновый процесс Tigo не запущен.", error=True)
             return
@@ -323,10 +352,15 @@ class HomePage:
             )
             return
 
+        settings = get_settings()
+        if settings.selected_strategy != strategy.id:
+            settings.selected_strategy = strategy.id
+            save_settings(settings)
+
         debug("ui", f"start zapret strategy={strategy.name}")
 
         def work():
-            return daemon_start()
+            return daemon_start(strategy.id)
 
         def done(result):
             ok, msg = result
@@ -371,10 +405,19 @@ class HomePage:
         save_settings(settings)
         name = next((s.display_name for s in list_strategies() if s.id == strategy_id), strategy_id)
         debug("ui", f"selected strategy: {name}")
-        if get_effective_runtime_status().running:
-            ok, msg = restart_if_running()
-            self._show_message(msg or f"Перезапущено: {name}", error=not ok)
-            self._refresh_status()
+        status = get_effective_runtime_status()
+        if status.running or status.phase in {RuntimePhase.STARTING, RuntimePhase.STOPPING}:
+            self._show_transition_status("перезапуск zapret…")
+
+            def work():
+                return restart_if_running(strategy_id=strategy_id)
+
+            def done(result):
+                ok, msg = result
+                self._show_message(msg or f"Перезапущено: {name}", error=not ok)
+                self._refresh_status()
+
+            self._run_bg(work, done)
 
     def _on_game_filter_change(self, mode: str) -> None:
         settings = get_settings()

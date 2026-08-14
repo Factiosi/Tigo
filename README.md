@@ -10,7 +10,7 @@
 
 ## Установка
 
-1. Скачайте `Tigo-Setup-1.1.0.exe` на странице [Releases](https://github.com/Factiosi/Tigo/releases/latest).
+1. Скачайте `Tigo-Setup-1.1.1.exe` на странице [Releases](https://github.com/Factiosi/Tigo/releases/latest).
 2. Запустите установщик.
 3. Откройте Tigo через меню «Пуск».
 4. Подтвердите запрос Windows на запуск от имени администратора.

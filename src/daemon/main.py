@@ -11,7 +11,7 @@ import time
 from src.core.debug_log import info, warn
 from src.core.automation import automation_enabled
 from src.core.paths import APP_NAME, debug_log_path, ensure_layout, is_packaged_app
-from src.core.settings import AppSettings, get_settings, save_settings
+from src.core.settings import AppSettings, get_settings, reload_settings, save_settings
 from src.kernel import runtime_state
 from src.daemon.ipc import IpcServer, build_status_response
 from src.daemon.protocol import CommandName
@@ -95,13 +95,21 @@ class TigoDaemon:
         busy = status.tests_running or status.phase.value in {"starting", "stopping"}
         return status.running, busy
 
-    def _tray_start(self) -> tuple[bool, str]:
+    def _tray_start(self, request: dict | None = None) -> tuple[bool, str]:
         if not self._bootstrap_done.is_set():
             warn("daemon", "runtime still initializing")
             return False, "Tigo ещё инициализируется. Повторите через несколько секунд."
         with self._operation_lock:
             if self._test_runner.running:
                 return False, "Сначала остановите подбор стратегий."
+            reload_settings()
+            payload = request or {}
+            explicit_id = payload.get("strategy_id")
+            if isinstance(explicit_id, str) and explicit_id.strip():
+                for strategy in list_strategies():
+                    if strategy.id == explicit_id.strip():
+                        return start_strategy(strategy)
+                return False, "Выбранная стратегия не найдена."
             settings = get_settings()
             if settings.strategy_source == "custom":
                 if settings.custom_strategy_args.strip():
@@ -111,7 +119,8 @@ class TigoDaemon:
                 for strategy in list_strategies():
                     if strategy.id == settings.selected_strategy:
                         return start_strategy(strategy)
-            return False, "Выбранная стратегия не найдена."
+                return False, "Выбранная стратегия не найдена."
+            return False, "Стратегия не выбрана."
 
     def _tray_stop(self) -> tuple[bool, str]:
         with self._operation_lock:
@@ -299,7 +308,7 @@ class TigoDaemon:
         if cmd == "status":
             return build_status_response()
         if cmd == "start":
-            ok, message = self._tray_start()
+            ok, message = self._tray_start(request)
             return {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
         if cmd == "stop":
             ok, message = self._tray_stop()
@@ -319,6 +328,7 @@ class TigoDaemon:
                 "phase": self._test_runner.phase,
                 "current_strategy_id": active_strategy_id,
                 "completed_strategy_ids": self._test_runner.completed_strategy_ids,
+                "planned_strategy_ids": self._test_runner.planned_strategy_ids,
                 "version": version,
                 "probe": (
                     {

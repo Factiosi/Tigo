@@ -63,9 +63,12 @@ def daemon_status() -> DaemonStatus | None:
         return None
 
 
-def daemon_start() -> tuple[bool, str]:
+def daemon_start(strategy_id: str | None = None) -> tuple[bool, str]:
+    payload: dict[str, str] = {"cmd": "start"}
+    if strategy_id:
+        payload["strategy_id"] = strategy_id
     try:
-        response = _send_recv({"cmd": "start"}, timeout=_SLOW_TIMEOUT)
+        response = _send_recv(payload, timeout=_SLOW_TIMEOUT)
         return bool(response.get("ok")), str(response.get("message") or response.get("error") or "")
     except TimeoutError:
         return False, "Превышено время ожидания ответа daemon при запуске zapret."

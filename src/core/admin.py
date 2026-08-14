@@ -21,7 +21,9 @@ def _build_elevated_launch() -> tuple[str, str]:
     args.append("--elevated")
     arg_text = " ".join(f'"{arg}"' if " " in arg else arg for arg in args)
 
-    if getattr(sys, "frozen", False):
+    from src.core.paths import is_packaged_app
+
+    if is_packaged_app():
         return sys.executable, arg_text
 
     script = Path(sys.argv[0]).resolve()

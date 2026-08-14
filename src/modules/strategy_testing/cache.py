@@ -11,7 +11,7 @@ from src.core.debug_log import debug, warn
 from src.core.paths import test_results_cache_path
 from src.modules.strategy_testing.probe import TargetProbeResult
 
-_CACHE_VERSION = 1
+_CACHE_VERSION = 2
 
 
 def _utc_now() -> str:
@@ -28,6 +28,9 @@ def _read_cache_file() -> dict[str, Any]:
         warn("strategy_testing", f"test results cache unreadable: {exc}")
         return {"schema": _CACHE_VERSION, "versions": {}}
     if not isinstance(raw, dict):
+        return {"schema": _CACHE_VERSION, "versions": {}}
+    if raw.get("schema") != _CACHE_VERSION:
+        debug("strategy_testing", "test results cache schema changed; ignoring stale results")
         return {"schema": _CACHE_VERSION, "versions": {}}
     versions = raw.get("versions")
     if not isinstance(versions, dict):
@@ -77,6 +80,13 @@ def load_all_versions() -> dict[str, dict[str, dict[str, Any]]]:
             continue
         out[version] = {str(sid): entry for sid, entry in bucket.items() if isinstance(entry, dict)}
     return out
+
+
+def load_strategy_result(version: str, strategy_id: str) -> dict[str, Any] | None:
+    bucket = load_all_versions().get(version)
+    if not bucket:
+        return None
+    return bucket.get(strategy_id)
 
 
 def save_strategy_result(

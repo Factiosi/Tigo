@@ -1,4 +1,4 @@
-"""Transform downloaded flowseal package into Z1UI layout."""
+"""Transform downloaded Flowseal package into the Tigo layout."""
 
 from __future__ import annotations
 

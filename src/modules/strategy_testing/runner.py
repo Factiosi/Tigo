@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import Literal
 
 from src.core.debug_log import debug
 from src.kernel import runtime_state
@@ -23,6 +24,8 @@ _STATUS_LABELS = {
     "partial": "Частично работает",
     "full": "Полностью работает (лучший выбор)",
 }
+INTER_STRATEGY_PAUSE_SECONDS = 2.0
+TestPhase = Literal["idle", "testing", "pause"]
 
 
 def _score_to_status(passed: int, total: int) -> str:
@@ -47,6 +50,11 @@ class StrategyTestRunner:
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
         self._stop_requested = False
+        self._completed_lock = threading.Lock()
+        self._completed_strategy_ids: list[str] = []
+        self._phase: TestPhase = "idle"
+        self._active_strategy_id: str | None = None
+        self._version: str | None = None
 
     @property
     def running(self) -> bool:
@@ -57,6 +65,28 @@ class StrategyTestRunner:
         get_runner().stop()
         tls.append("Остановка тестов…", level=tls.TestLogLevel.WARN)
         debug("strategy_testing", "stop requested")
+
+    @property
+    def completed_strategy_ids(self) -> list[str]:
+        with self._completed_lock:
+            return list(self._completed_strategy_ids)
+
+    @property
+    def phase(self) -> TestPhase:
+        return self._phase
+
+    @property
+    def active_strategy_id(self) -> str | None:
+        return self._active_strategy_id
+
+    @property
+    def version(self) -> str | None:
+        return self._version
+
+    def _mark_completed(self, strategy_id: str) -> None:
+        with self._completed_lock:
+            if strategy_id not in self._completed_strategy_ids:
+                self._completed_strategy_ids.append(strategy_id)
 
     def start(self, job: StrategyTestJob, on_done=None) -> tuple[bool, str]:
         if self.running:
@@ -73,13 +103,18 @@ class StrategyTestRunner:
             return False, message
 
         self._stop_requested = False
+        self._phase = "idle"
+        self._active_strategy_id = None
+        self._version = job.version
+        with self._completed_lock:
+            self._completed_strategy_ids.clear()
         debug("strategy_testing", f"starting tests: {job.strategy_ids}")
 
         def runner() -> None:
             try:
-                self._run_job(job)
+                ok, message = self._run_job(job)
                 if on_done:
-                    on_done(True, "Тестирование завершено.")
+                    on_done(ok, message)
             except Exception as exc:  # noqa: BLE001
                 tls.append(str(exc), level=tls.TestLogLevel.ERROR)
                 debug("strategy_testing", str(exc), level="error")
@@ -88,23 +123,25 @@ class StrategyTestRunner:
             finally:
                 runtime_state.set_tests_running(False)
                 stop_strategy(cleanup_windivert=False)
+                self._phase = "idle"
+                self._active_strategy_id = None
                 self._thread = None
 
         self._thread = threading.Thread(target=runner, daemon=True)
         self._thread.start()
         return True, "Тесты запущены."
 
-    def _run_job(self, job: StrategyTestJob) -> None:
+    def _run_job(self, job: StrategyTestJob) -> tuple[bool, str]:
         strategies = {s.id: s for s in list_strategies()}
         selected = [strategies[sid] for sid in job.strategy_ids if sid in strategies]
         if not selected:
             tls.append("Выбранные стратегии не найдены.", level=tls.TestLogLevel.ERROR)
-            return
+            return False, "Выбранные стратегии не найдены."
 
         ok, message = ensure_runtime_preflight(version=job.version)
         if not ok:
             tls.append(message, level=tls.TestLogLevel.ERROR)
-            return
+            return False, message
 
         runtime_state.set_tests_running(True)
         stop_strategy(cleanup_windivert=False)
@@ -135,6 +172,8 @@ class StrategyTestRunner:
                 break
 
             debug("strategy_testing", f"testing [{index}/{len(selected)}] {strategy.display_name}")
+            self._phase = "testing"
+            self._active_strategy_id = strategy.id
             tr.set_running(strategy.id, version=job.version)
             tls.append(
                 f"--- [{index}/{len(selected)}] {strategy.display_name} ---",
@@ -154,6 +193,9 @@ class StrategyTestRunner:
                     score=None,
                     detail=msg,
                 )
+                self._mark_completed(strategy.id)
+                self._phase = "pause"
+                time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
                 continue
 
             started, start_msg = runner.start(spec, wait_seconds=5.0)
@@ -167,6 +209,9 @@ class StrategyTestRunner:
                     score=None,
                     detail=start_msg,
                 )
+                self._mark_completed(strategy.id)
+                self._phase = "pause"
+                time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
                 continue
 
             tls.append("> Проверка целей…", level=tls.TestLogLevel.INFO)
@@ -192,6 +237,7 @@ class StrategyTestRunner:
                 score=(passed, total),
                 detail=detail,
             )
+            self._mark_completed(strategy.id)
             tls.append(
                 f"{strategy.display_name}: {_STATUS_LABELS[status]} ({passed}/{total})",
                 level=tls.TestLogLevel.OK if status == "full" else tls.TestLogLevel.INFO,
@@ -199,7 +245,10 @@ class StrategyTestRunner:
             debug("strategy_testing", f"{strategy.display_name}: {status} ({passed}/{total})")
 
             runner.stop()
-            time.sleep(0.5)
+            self._phase = "pause"
+            time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
 
         if not self._stop_requested:
             tls.append("Все тесты завершены.", level=tls.TestLogLevel.OK)
+            return True, "Тестирование завершено."
+        return True, "Тестирование остановлено."

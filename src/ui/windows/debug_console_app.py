@@ -1,17 +1,12 @@
-"""Standalone debug console process."""
+"""Flet entry point for the standalone debug console window."""
 
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 import flet as ft
 
+from src.core.branding import app_window_icon_path
 from src.core.debug_log import clear, get_persistent_text
 from src.core.fonts import FONT_JETBRAINS_MONO, register_mono_font
 from src.core.paths import APP_NAME
@@ -45,6 +40,9 @@ def main(page: ft.Page) -> None:
     page.window.min_width = 480
     page.window.min_height = 240
     page.padding = 0
+    icon_path = app_window_icon_path()
+    if icon_path is not None:
+        page.window.icon = str(icon_path)
 
     log_text = ft.Text(
         " ",
@@ -117,19 +115,16 @@ def main(page: ft.Page) -> None:
             return
 
         at_bottom = e.extent_after <= _BOTTOM_EPSILON
-
         if at_bottom:
             stick_to_bottom = True
             up_from_bottom_px = 0.0
             return
-
         if not stick_to_bottom:
             return
 
         delta = e.scroll_delta
         if delta is None or delta >= 0:
             return
-
         up_from_bottom_px += abs(delta)
         if up_from_bottom_px >= _WHEEL_NOTCH_PX * _UNPIN_WHEEL_NOTCHES:
             stick_to_bottom = False
@@ -210,7 +205,5 @@ def main(page: ft.Page) -> None:
     )
     page.run_task(refresh, force_bottom=True)
     page.run_task(poll_logs)
-
-
-if __name__ == "__main__":
-    ft.run(main)
+    page.window.visible = True
+    page.update()

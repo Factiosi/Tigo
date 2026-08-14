@@ -22,8 +22,8 @@ def _require_dependencies(*, include_flet: bool = True) -> None:
             f"Не найден модуль '{missing}' для {sys.executable}\n\n"
             "Зависимости, скорее всего, установлены в другой версии Python.\n"
             "Используйте один из вариантов:\n"
-            f"  {sys.executable} -m pip install -r requirements.txt\n"
-            "  py -3.12 -m venv .venv && .venv\\Scripts\\python -m pip install -r requirements.txt\n"
+            f"  {sys.executable} -m pip install -r requirements/base.txt\n"
+            "  py -3.12 -m venv .venv && .venv\\Scripts\\python -m pip install -r requirements/base.txt\n"
             f"  {sys.executable} run.py\n",
             file=sys.stderr,
         )
@@ -31,14 +31,9 @@ def _require_dependencies(*, include_flet: bool = True) -> None:
 
 
 def _configure_flet_desktop() -> None:
-    """Point Flet at bundled desktop client in standalone Nuitka builds."""
-    if not getattr(sys, "frozen", False):
-        return
-    from src.core.paths import program_root
+    from src.core.paths import configure_frozen_flet_desktop
 
-    flet_view = program_root() / "flet"
-    if (flet_view / "flet.exe").exists():
-        os.environ.setdefault("FLET_VIEW_PATH", str(flet_view))
+    configure_frozen_flet_desktop()
 
 
 def _is_daemon_mode(argv: list[str]) -> bool:
@@ -50,15 +45,18 @@ def _is_debug_console_mode(argv: list[str]) -> bool:
 
 
 def main() -> None:
+    from src.core.paths import verify_frozen_layout
+
+    verify_frozen_layout()
     argv = sys.argv
     if _is_debug_console_mode(argv):
         _require_dependencies(include_flet=True)
         import flet as ft
 
         _configure_flet_desktop()
-        from debug_console_app import main as debug_console_main
+        from src.ui.windows.debug_console_app import main as debug_console_main
 
-        ft.run(debug_console_main)
+        ft.run(debug_console_main, view=ft.AppView.FLET_APP_HIDDEN)
         return
 
     if _is_daemon_mode(argv):
@@ -69,7 +67,7 @@ def main() -> None:
         except ModuleNotFoundError as exc:
             print(
                 f"Для daemon нужны pystray и Pillow: {exc.name}\n"
-                f"  {sys.executable} -m pip install -r requirements.txt",
+                f"  {sys.executable} -m pip install -r requirements/base.txt",
                 file=sys.stderr,
             )
             raise SystemExit(1) from exc
@@ -83,8 +81,15 @@ def main() -> None:
                 sys.exit(0)
             sys.exit(0)
         from src.daemon.main import run_daemon
+        from src.daemon.singleton import acquire_daemon_mutex, release_daemon_mutex
 
-        run_daemon()
+        if not acquire_daemon_mutex():
+            log_info("daemon", "existing daemon instance detected")
+            return
+        try:
+            run_daemon()
+        finally:
+            release_daemon_mutex()
         return
 
     _require_dependencies(include_flet=True)
@@ -112,9 +117,16 @@ def main() -> None:
     log_info("bootstrap", "daemon ready")
     register_gui_with_daemon(os.getpid())
 
+    from src.modules.strategy_testing.results import load_cache
+
+    load_cache()
     _configure_flet_desktop()
     log_info("bootstrap", "launching UI")
-    ft.run(ui_main, assets_dir=str(program_root()))
+    ft.run(
+        ui_main,
+        view=ft.AppView.FLET_APP_HIDDEN,
+        assets_dir=str(program_root()),
+    )
 
 
 if __name__ == "__main__":

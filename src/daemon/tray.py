@@ -11,7 +11,7 @@ import pystray
 from src.core.branding import load_tray_icon
 from src.core.debug_log import debug
 from src.core.paths import APP_NAME
-from src.daemon.ui_launcher import launch_gui
+from src.daemon.ui_launcher import launch_gui, notify_spawn_error
 
 
 class TrayController:
@@ -104,12 +104,12 @@ class TrayController:
             debug("daemon", f"tray icon sync: {exc}", level="error")
 
     def _can_start(self, _item) -> bool:
-        running, _busy = self._status_provider()
-        return not running
+        running, busy = self._status_provider()
+        return not running and not busy
 
     def _can_stop(self, _item) -> bool:
-        running, _busy = self._status_provider()
-        return running
+        running, busy = self._status_provider()
+        return running and not busy
 
     def _menu_start(self, _icon, _item) -> None:
         self._on_start()
@@ -125,6 +125,7 @@ class TrayController:
         ok, msg = launch_gui()
         if not ok:
             debug("daemon", f"open ui failed: {msg}", level="error")
+            notify_spawn_error(msg)
 
     def _menu_shutdown(self, icon, _item) -> None:
         self._on_shutdown(icon)

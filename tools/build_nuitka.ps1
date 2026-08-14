@@ -43,12 +43,15 @@ $buildArgs = @(
     "--output-dir=$DistRoot",
     "--output-filename=Tigo.exe",
     "--windows-icon-from-ico=$icon",
+    "--windows-console-mode=disable",
+    "--windows-uac-admin",
     "--product-name=Tigo",
     "--file-version=$Version",
     "--company-name=Tigo",
     "--include-data-dir=$(Join-Path $Repo 'logos')=logos",
     "--include-package=src",
     "--include-package=flet",
+    "--include-package-data=flet",
     "--include-package=flet_desktop",
     "--include-package=httpx",
     "--include-package=httpcore",
@@ -62,6 +65,7 @@ $buildArgs = @(
     "--nofollow-import-to=unittest",
     "--nofollow-import-to=test",
     "--nofollow-import-to=pytest",
+    "--nofollow-import-to=mcp",
     (Join-Path $Repo "run.py")
 )
 
@@ -84,11 +88,18 @@ if (-not (Test-Path $exe)) {
     if (Test-Path $legacy) { Rename-Item $legacy "Tigo.exe" }
 }
 
-$fletDest = Join-Path $OutDir "flet"
+$fletDest = Join-Path $OutDir "flet_client"
 New-Item -ItemType Directory -Force -Path $fletDest | Out-Null
 Copy-Item -Path (Join-Path $fletCache "flet\*") -Destination $fletDest -Recurse -Force
+
+foreach ($intermediate in @("run.build", "run.onefile-build")) {
+    $path = Join-Path $DistRoot $intermediate
+    if (Test-Path $path) {
+        Remove-Item -Recurse -Force $path
+    }
+}
 
 Write-Host ""
 Write-Host "Build complete: $OutDir"
 Write-Host "  Tigo.exe"
-Write-Host "  flet\flet.exe"
+Write-Host "  flet_client\flet.exe"

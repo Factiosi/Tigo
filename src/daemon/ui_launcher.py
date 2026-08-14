@@ -1,25 +1,16 @@
-"""Spawn Z1UI GUI process and track instances for shutdown."""
+"""Spawn Tigo GUI process and track instances for shutdown."""
 
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from src.core.debug_log import debug
-from src.modules.lifecycle.public import is_runtime_available, packaged_executable
+from src.core.paths import APP_NAME, frozen_subprocess_env, packaged_app_executable, program_root
 
 _gui_pids: set[int] = set()
 _gui_processes: list[subprocess.Popen] = []
-
-
-def _run_py_path() -> Path:
-    root = Path(__file__).resolve().parents[2]
-    run_py = root / "run.py"
-    if run_py.exists():
-        return run_py
-    return root.parent / "run.py"
 
 
 def register_gui_pid(pid: int | None = None) -> None:
@@ -69,48 +60,59 @@ def close_all_gui() -> None:
     debug("daemon", "all GUI processes closed")
 
 
-def launch_gui(*, hidden: bool = False) -> tuple[bool, str]:
-    if is_runtime_available():
-        exe = packaged_executable()
-        if exe is None:
-            return False, "Не удалось определить путь к приложению."
-        args = [str(exe), "--ui"]
-        if hidden:
-            args.append("--tray")
-    else:
-        args = [sys.executable, str(_run_py_path()), "--ui"]
-        if hidden:
-            args.append("--tray")
-
-    creationflags = 0
+def _spawn_args(*extra: str) -> tuple[list[str], dict]:
+    root = program_root()
+    cwd = str(root)
+    kwargs: dict = {"cwd": cwd}
     if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | getattr(subprocess, "DETACHED_PROCESS", 0)
 
+    exe = packaged_app_executable()
+    if exe is not None:
+        kwargs["env"] = frozen_subprocess_env()
+        return [str(exe), *extra], kwargs
+
+    run_py = root / "run.py"
+    if not run_py.is_file():
+        raise FileNotFoundError(
+            f"Не найден Tigo.exe или run.py в {root}. "
+            "Запускайте приложение из полной папки dist\\Tigo\\."
+        )
+    return [sys.executable, str(run_py), *extra], kwargs
+
+
+def launch_gui(*, hidden: bool = False) -> tuple[bool, str]:
+    args = ["--ui"]
+    if hidden:
+        args.append("--tray")
     try:
-        proc = subprocess.Popen(args, creationflags=creationflags)
+        cmd, kwargs = _spawn_args(*args)
+        proc = subprocess.Popen(cmd, **kwargs)
     except OSError as exc:
         return False, str(exc)
+    except FileNotFoundError as exc:
+        return False, str(exc)
     _gui_processes.append(proc)
-    debug("daemon", f"GUI launched: {' '.join(args)} pid={proc.pid}")
+    debug("daemon", f"GUI launched: {' '.join(cmd)} pid={proc.pid}")
     return True, "Окно открыто."
 
 
 def launch_daemon() -> tuple[bool, str]:
-    if is_runtime_available():
-        exe = packaged_executable()
-        if exe is None:
-            return False, "Не удалось определить путь к приложению."
-        args = [str(exe), "--daemon"]
-    else:
-        args = [sys.executable, str(_run_py_path()), "--daemon"]
-
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW
-
     try:
-        subprocess.Popen(args, creationflags=creationflags)
+        cmd, kwargs = _spawn_args("--daemon")
+        subprocess.Popen(cmd, **kwargs)
     except OSError as exc:
         return False, str(exc)
-    debug("daemon", "daemon process spawned")
+    except FileNotFoundError as exc:
+        return False, str(exc)
+    debug("daemon", f"daemon process spawned: {' '.join(cmd)}")
     return True, "Фоновый процесс запущен."
+
+
+def notify_spawn_error(message: str) -> None:
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x10)
+    except OSError:
+        pass

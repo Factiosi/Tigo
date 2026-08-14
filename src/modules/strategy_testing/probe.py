@@ -8,8 +8,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.core.paths import utils_dir
-
 CREATE_NO_WINDOW = 0x08000000
 CURL_TIMEOUT = 5
 MAX_PARALLEL = 8
@@ -36,7 +34,9 @@ class TargetProbeResult:
 
 
 def load_targets(path: Path | None = None) -> list[ProbeTarget]:
-    targets_file = path or (utils_dir() / "targets.txt")
+    if path is None:
+        return _default_targets()
+    targets_file = path
     if not targets_file.exists():
         return _default_targets()
 
@@ -59,8 +59,22 @@ def load_targets(path: Path | None = None) -> list[ProbeTarget]:
 def _default_targets() -> list[ProbeTarget]:
     return [
         ProbeTarget("DiscordMain", "https://discord.com", None),
+        ProbeTarget("DiscordGateway", "https://gateway.discord.gg", None),
+        ProbeTarget("DiscordCDN", "https://cdn.discordapp.com", None),
+        ProbeTarget("DiscordUpdates", "https://updates.discord.com", None),
+        ProbeTarget("YouTubeWeb", "https://www.youtube.com", None),
+        ProbeTarget("YouTubeShort", "https://youtu.be", None),
+        ProbeTarget("YouTubeImage", "https://i.ytimg.com", None),
+        ProbeTarget("YouTubeVideoRedirect", "https://redirector.googlevideo.com", None),
         ProbeTarget("GoogleMain", "https://www.google.com", None),
+        ProbeTarget("GoogleGstatic", "https://www.gstatic.com", None),
+        ProbeTarget("CloudflareWeb", "https://www.cloudflare.com", None),
+        ProbeTarget("CloudflareCDN", "https://cdnjs.cloudflare.com", None),
         ProbeTarget("CloudflareDNS1111", None, "1.1.1.1"),
+        ProbeTarget("CloudflareDNS1001", None, "1.0.0.1"),
+        ProbeTarget("GoogleDNS8888", None, "8.8.8.8"),
+        ProbeTarget("GoogleDNS8844", None, "8.8.4.4"),
+        ProbeTarget("Quad9DNS9999", None, "9.9.9.9"),
     ]
 
 

@@ -41,6 +41,7 @@ from src.ui.filter_labels import (
     game_filter_label,
     ipset_filter_label,
 )
+from src.ui.strategy_status import strategy_status_pill
 
 CUSTOM_HINT = (
     "Здесь можно указать свою стратегию. Пример верного заполнения: "
@@ -130,6 +131,11 @@ class HomePage:
                 self._selected_strategy_id if has_strategies else "",
                 on_change=self._on_strategy_change if has_strategies else None,
                 disabled=not has_strategies,
+                option_trailing=lambda strategy_id: strategy_status_pill(
+                    strategy_id, compact=True
+                )
+                if strategy_id
+                else None,
             )
             game_select = make_select(
                 self.page,

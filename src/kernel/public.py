@@ -48,7 +48,7 @@ def get_effective_runtime_status() -> RuntimeStatus:
                     pid=remote.pid,
                     windivert_sys_present=local.windivert_sys_present,
                     error=remote.error or None,
-                    tests_running=local.tests_running,
+                    tests_running=remote.tests_running,
                 )
     except ImportError:
         pass

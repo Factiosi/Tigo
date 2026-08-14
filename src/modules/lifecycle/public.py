@@ -14,13 +14,15 @@ AUTOSTART_TASK_NAME = "Tigo Autostart"
 
 
 def is_runtime_available() -> bool:
-    return getattr(sys, "frozen", False)
+    from src.core.paths import is_packaged_app
+
+    return is_packaged_app()
 
 
 def packaged_executable() -> Path | None:
-    if not is_runtime_available():
-        return None
-    return Path(sys.executable).resolve()
+    from src.core.paths import packaged_app_executable
+
+    return packaged_app_executable()
 
 
 def apply_autostart_setting(enabled: bool) -> tuple[bool, str]:
@@ -61,6 +63,8 @@ def should_start_hidden(argv: list[str] | None = None) -> bool:
     args = argv if argv is not None else sys.argv
     if "--tray" in args:
         return True
+    if "--ui" in args:
+        return False
     if not is_runtime_available():
         return False
     from src.core.settings import get_settings
@@ -97,6 +101,12 @@ def require_daemon_for_gui() -> None:
     from src.core.paths import APP_NAME
 
     text = msg or "Не удалось запустить фоновый процесс Tigo."
+    if is_runtime_available() and "WinError 2" in text:
+        text = (
+            f"{text}\n\n"
+            "Проверьте, что запускаете полную папку dist\\Tigo\\ "
+            "(Tigo.exe + flet_client\\ + logos\\)."
+        )
     try:
         import ctypes
 

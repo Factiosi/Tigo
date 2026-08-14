@@ -1,4 +1,4 @@
-"""Custom font resolution for Z1UI."""
+"""Custom font resolution for Tigo."""
 
 from __future__ import annotations
 

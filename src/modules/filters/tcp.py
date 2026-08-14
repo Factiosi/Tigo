@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
+CREATE_NO_WINDOW = 0x08000000
+
 
 def enable_tcp_timestamps() -> bool:
     check = subprocess.run(
@@ -13,6 +15,7 @@ def enable_tcp_timestamps() -> bool:
         encoding="cp866",
         errors="replace",
         check=False,
+        creationflags=CREATE_NO_WINDOW,
     )
     if "timestamps" in check.stdout.lower() and "enabled" in check.stdout.lower():
         return True
@@ -24,5 +27,6 @@ def enable_tcp_timestamps() -> bool:
         encoding="cp866",
         errors="replace",
         check=False,
+        creationflags=CREATE_NO_WINDOW,
     )
     return result.returncode == 0

@@ -9,7 +9,7 @@ import flet as ft
 from src.core.paths import APP_NAME, default_app_data_root
 from src.core.version import __version__
 from src.core.settings import get_settings, save_settings
-from src.kernel.public import get_runtime_status, restart_if_running
+from src.kernel.public import get_effective_runtime_status, restart_if_running
 from src.modules.lifecycle.public import apply_autostart_setting
 from src.modules.storage.migrate import apply_storage_root, current_storage_display
 from src.modules.strategies.repository import (
@@ -457,9 +457,9 @@ class SettingsPage:
         if settings.selected_strategy not in known:
             settings.selected_strategy = strategies[0].id if strategies else ""
             save_settings(settings)
-        if get_runtime_status().running:
-                ok, msg = restart_if_running()
-                self._snack(msg or f"Версия {version}. Перезапущено.", error=not ok)
+        if get_effective_runtime_status().running:
+            ok, msg = restart_if_running()
+            self._snack(msg or f"Версия {version}. Перезапущено.", error=not ok)
         else:
             self._snack(f"Версия flowseal: {version}.")
 

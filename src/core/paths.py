@@ -39,17 +39,110 @@ GITHUB_RELEASE_API = (
     "https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest"
 )
 GITHUB_RELEASE_PAGE = "https://github.com/Flowseal/zapret-discord-youtube/releases/latest"
+TIGO_GITHUB_REPO = "Factiosi/Tigo"
+TIGO_RELEASE_API = "https://api.github.com/repos/Factiosi/Tigo/releases/latest"
+TIGO_RELEASE_PAGE = "https://github.com/Factiosi/Tigo/releases/latest"
+
+
+def _install_root_from_layout() -> Path | None:
+    """Detect standalone install dir by bundled layout (works without sys.frozen)."""
+    root = Path(sys.executable).resolve().parent
+    if (root / "Tigo.exe").exists() and (root / "flet_client" / "flet.exe").exists():
+        return root
+    if (root / "Tigo.exe").exists() and (root / "flet" / "flet.exe").exists():
+        return root
+    return None
+
+
+def is_packaged_app() -> bool:
+    """True for Nuitka/PyInstaller builds (Tigo.exe), not ``python run.py``."""
+    if _install_root_from_layout() is not None:
+        return True
+    if getattr(sys, "frozen", False) or getattr(sys, "__compiled__", False):
+        return True
+    return Path(sys.executable).resolve().name.lower() in {"tigo.exe", "run.exe"}
 
 
 def program_root() -> Path:
     """Install directory (``Program Files\\Tigo`` when packaged, repo root in dev)."""
-    if getattr(sys, "frozen", False):
+    install = _install_root_from_layout()
+    if install is not None:
+        return install
+    if is_packaged_app():
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
 
 
-def resources_dir() -> Path:
-    return program_root() / "resources"
+def packaged_app_executable() -> Path | None:
+    """Tigo.exe for spawning child processes in standalone builds."""
+    install = _install_root_from_layout()
+    if install is not None:
+        return (install / "Tigo.exe").resolve()
+    exe = Path(sys.executable).resolve()
+    if exe.name.lower() in {"tigo.exe", "run.exe"} and exe.is_file():
+        return exe
+    bundled = program_root() / "Tigo.exe"
+    if bundled.is_file():
+        return bundled.resolve()
+    return None
+
+
+def frozen_flet_view_dir() -> Path | None:
+    """Bundled Flet desktop client next to the exe (Nuitka standalone)."""
+    if not is_packaged_app():
+        return None
+    root = program_root()
+    for name in ("flet_client", "flet"):
+        flet_view = root / name
+        if (flet_view / "flet.exe").exists():
+            return flet_view
+    return None
+
+
+def configure_frozen_flet_desktop() -> None:
+    """Point Flet at bundled desktop client in standalone builds."""
+    flet_view = frozen_flet_view_dir()
+    if flet_view is not None:
+        os.environ.setdefault("FLET_VIEW_PATH", str(flet_view))
+
+
+def frozen_subprocess_env() -> dict[str, str]:
+    """Environment for child Tigo.exe processes in standalone builds."""
+    env = os.environ.copy()
+    flet_view = frozen_flet_view_dir()
+    if flet_view is not None:
+        env["FLET_VIEW_PATH"] = str(flet_view)
+    return env
+
+
+def verify_frozen_layout() -> None:
+    """Fail fast when the user copied only Tigo.exe without bundled folders."""
+    if not is_packaged_app():
+        return
+    root = program_root()
+    missing: list[str] = []
+    if not (root / "flet_client" / "flet.exe").exists() and not (
+        root / "flet" / "flet.exe"
+    ).exists():
+        missing.append("flet_client\\flet.exe")
+    if not (root / "logos" / "online" / "tigo.ico").exists():
+        missing.append("logos\\")
+    if not missing:
+        return
+    text = (
+        "Неполная установка Tigo.\n\n"
+        "Рядом с Tigo.exe должны лежать папки flet_client\\ и logos\\ "
+        "(вся папка dist\\Tigo\\, а не один exe-файл).\n\n"
+        f"Не найдено: {', '.join(missing)}"
+    )
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, APP_NAME, 0x10)
+    except OSError:
+        pass
+    print(text, file=sys.stderr)
+    raise SystemExit(1)
 
 
 def runtime_version_path() -> Path:

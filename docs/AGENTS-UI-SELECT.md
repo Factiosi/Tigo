@@ -1,4 +1,4 @@
-# AGENTS: кастомный select, overlay и скролл (Z1UI)
+# AGENTS: кастомный select, overlay и скролл (Tigo)
 
 Документ для AI-агентов: решения, ограничения Flet и **что не делать повторно**.  
 Связан с `src/ui/components.py` (`make_select`, `scroll_page`) и страницами в `src/ui/pages/`.
@@ -75,7 +75,7 @@ menu_popup (Container) — НЕ в Column, живёт в page.overlay при о�
 
 ### Текущее решение (зафиксировано)
 
-- `scroll_page(..., page=...)` регистрирует `ListView.on_scroll` → обновляет `page._z1ui_page_scroll_offset`.
+- `scroll_page(..., page=...)` регистрирует `ListView.on_scroll` → обновляет `page._tigo_page_scroll_offset`.
 - При scroll вызывается `reposition_menu`:  
   `field_top = anchor_field_top - (scroll - anchor_scroll)` → `menu_popup.update()`.
 - Меню **остаётся открытым** при прокрутке.
@@ -106,7 +106,7 @@ menu_popup (Container) — НЕ в Column, живёт в page.overlay при о�
 | Кнопки обновлений home | `_update_action_button` → `bind_select_dismiss` |
 | Строки стратегий | `bind_select_dismiss(toggle_select/expand)` |
 | Другой select | `open_menu` → `_close_active_select(refresh=False)` |
-| Смена вкладки | `Z1UIApp._navigate` → `close_active_select(refresh=False)` |
+| Смена вкладки | `TigoApp._navigate` → `close_active_select(refresh=False)` |
 | Escape | глобальный keyboard handler |
 
 **Важно:** `close_menu(refresh=False)` + **один** `page.update()` в конце handler — иначе Flet «съедает» клик по кнопке.
@@ -123,7 +123,7 @@ scroll_page(*sections, page=self.page)  # page обязателен для scrol
 
 - Простой `ListView` → один `Container` → `Column` секций.
 - `on_click` на контейнере — dismiss select (клик по «пустому» фону колонки).
-- **`page` нужен** на home, settings, strategies, dns, lists — иначе нет `_z1ui_page_scroll_offset` и reposition.
+- **`page` нужен** на home, settings, strategies, dns, lists — иначе нет `_tigo_page_scroll_offset` и reposition.
 
 ---
 

@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+tools/node_modules/
+
+# IDE / agent
+.vscode/
+.cursor/
+
+# dev-only scripts
+tools/measure_resources.ps1
+
+# OS / logs
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+
+# logo build intermediates
+logos/**/tigo-{16,32,64,256}.png
+logos/**/_ico-*.png
+logos/**/_test_*.png
+
+# reference material for agents (not part of the app)
+reference/
+
+# test result artifacts
+**/test results/
+
+# winws runtime (installed next to the program, not in git)
+/bin/
+/lists/
+/utils/
+/runtime-version.txt

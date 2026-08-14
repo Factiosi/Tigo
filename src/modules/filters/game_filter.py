@@ -1,0 +1,62 @@
+"""Game filter flag management."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from src.core.debug_log import debug
+from src.core.paths import utils_dir
+from src.core.settings import AppSettings, GameFilterMode, get_settings, save_settings
+
+GAME_FILTER_PORTS = {
+    "off": ("12", "12"),
+    "all": ("1024-65535", "1024-65535"),
+    "tcp": ("1024-65535", "12"),
+    "udp": ("12", "1024-65535"),
+}
+
+
+def get_game_filter_ports(mode: GameFilterMode | None = None) -> tuple[str, str]:
+    mode = mode or get_settings().game_filter
+    return GAME_FILTER_PORTS.get(mode, GAME_FILTER_PORTS["off"])
+
+
+def get_game_filter_flag_path(_version: str) -> Path:
+    return utils_dir() / "game_filter.enabled"
+
+
+def read_game_filter_mode(version: str) -> GameFilterMode:
+    path = get_game_filter_flag_path(version)
+    if not path.exists():
+        return "off"
+    value = path.read_text(encoding="utf-8", errors="replace").strip().lower()
+    if value == "all":
+        return "all"
+    if value == "tcp":
+        return "tcp"
+    if value == "udp":
+        return "udp"
+    return "off"
+
+
+def apply_game_filter(version: str, mode: GameFilterMode) -> None:
+    path = get_game_filter_flag_path(version)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "off":
+        if path.exists():
+            path.unlink()
+    else:
+        path.write_text(mode + "\n", encoding="utf-8")
+
+    settings = get_settings()
+    settings.game_filter = mode
+    save_settings(settings)
+    debug("filters", f"game filter set to {mode}")
+
+
+def sync_game_filter_from_disk(version: str) -> GameFilterMode:
+    mode = read_game_filter_mode(version)
+    settings = get_settings()
+    settings.game_filter = mode
+    save_settings(settings)
+    return mode

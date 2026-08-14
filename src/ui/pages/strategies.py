@@ -1,0 +1,556 @@
+"""Strategy testing and selection page."""
+
+from __future__ import annotations
+
+import math
+import threading
+from typing import Callable
+
+import flet as ft
+
+from src.core.settings import get_settings
+from src.modules.strategies.models import Strategy
+from src.modules.strategies.repository import list_strategies
+from src.modules.strategy_testing import results as tr
+from src.modules.strategy_testing.results import ResultChange
+from src.modules.strategy_testing.runner import StrategyTestJob, StrategyTestRunner
+from src.theme import T
+from src.ui.components import (
+    CHEVRON_ANIM,
+    EXPAND_ANIM,
+    bind_select_dismiss,
+    block_section,
+    pill_button,
+    scroll_page,
+    set_pill_disabled,
+    status_pill,
+    ui_text,
+)
+from src.ui.probe_table import build_probe_table, factiosi_spinner
+
+
+def _probe_body_padding(*, expanded: bool) -> ft.Padding:
+    if not expanded:
+        return ft.Padding.all(0)
+    return ft.Padding.only(left=28, right=12, bottom=12, top=4)
+
+
+def _status_pill_for(strategy_id: str) -> ft.Control:
+    item = tr.get_result(strategy_id)
+    if not item:
+        return status_pill("offline", "Не протестирована")
+    mapping = {
+        "full": ("active", "Полностью работает (лучший выбор)"),
+        "partial": ("expiring", "Частично работает"),
+        "failed": ("error", "Не работает"),
+        "unknown": ("expiring", "Неизвестно"),
+    }
+    key, label = mapping.get(item.state, ("offline", "Не протестирована"))
+    return status_pill(key, label)
+
+
+def _should_build_probe_table(strategy_id: str) -> bool:
+    return True
+
+
+class StrategiesPage:
+    def __init__(self, page: ft.Page) -> None:
+        self.page = page
+        self._runner = StrategyTestRunner()
+        self._test_type = "standard"
+        self._selected: set[str] = set()
+        self._expanded: set[str] = set()
+        self._checkboxes: dict[str, ft.Checkbox] = {}
+        self._master_checkbox: ft.Checkbox | None = None
+        self._start_btn: ft.Control | None = None
+        self._stop_btn: ft.Control | None = None
+        self._status_text: ft.Text | None = None
+        self._strategy_header: ft.Row | None = None
+        self._strategy_actions: ft.Row | None = None
+        self._strategy_list_panel: ft.Column | None = None
+        self._strategy_list = ft.Column(spacing=4, tight=True)
+        self._results_unsubscribe: Callable[[], None] | None = None
+        self._strategies: list[Strategy] = []
+        self._strategies_by_id: dict[str, Strategy] = {}
+        self._row_index: dict[str, int] = {}
+        self._probe_body_by_id: dict[str, ft.Container] = {}
+        self._chevron_by_id: dict[str, ft.Icon] = {}
+        self._probe_dirty: set[str] = set()
+        self._probe_flush_timer: threading.Timer | None = None
+        self._probe_timer_lock = threading.Lock()
+        self._last_current_id: str | None = None
+
+    def stop(self) -> None:
+        with self._probe_timer_lock:
+            if self._probe_flush_timer:
+                self._probe_flush_timer.cancel()
+                self._probe_flush_timer = None
+            self._probe_dirty.clear()
+        if self._results_unsubscribe:
+            self._results_unsubscribe()
+            self._results_unsubscribe = None
+
+    def _strategy_sort_key(self, strategy: Strategy) -> tuple[int, str]:
+        sid = strategy.id
+        if tr.current_strategy_id() == sid:
+            return (0, strategy.display_name.lower())
+
+        item = tr.get_result(sid)
+        if item is None:
+            return (3, strategy.display_name.lower())
+
+        rank_by_state = {
+            "full": 1,
+            "partial": 2,
+            "failed": 4,
+            "unknown": 4,
+        }
+        return (rank_by_state.get(item.state, 3), strategy.display_name.lower())
+
+    def _sorted_strategies(self) -> list[Strategy]:
+        return sorted(self._strategies, key=self._strategy_sort_key)
+
+    def _ui(self, fn) -> None:
+        """Run UI mutation on the Flet main thread."""
+        try:
+            self.page.run_thread(fn)
+        except AttributeError:
+            fn()
+
+    def _populate_list(self) -> None:
+        current_id = tr.current_strategy_id()
+        if current_id and current_id in self._selected:
+            self._expanded.add(current_id)
+
+        rows: list[ft.Control] = []
+        self._row_index.clear()
+        self._probe_body_by_id.clear()
+        self._chevron_by_id.clear()
+
+        if not self._strategies:
+            rows.append(ui_text("Нет доступных стратегий.", color=T.TEXT_MUTED))
+        else:
+            self._checkboxes.clear()
+            for index, strategy in enumerate(self._sorted_strategies()):
+                rows.append(self._build_strategy_row(strategy))
+                self._row_index[strategy.id] = index
+
+        self._strategy_list.controls = rows
+        self._update_buttons()
+
+    def _probe_content_for(self, strategy_id: str) -> ft.Control | None:
+        if not _should_build_probe_table(strategy_id):
+            return None
+        return build_probe_table(strategy_id)
+
+    def _apply_expand_state(self, strategy_id: str) -> None:
+        body = self._probe_body_by_id.get(strategy_id)
+        chevron = self._chevron_by_id.get(strategy_id)
+        if body is None or chevron is None:
+            self._update_row(strategy_id)
+            return
+
+        expanded = strategy_id in self._expanded
+        chevron.rotate = (
+            ft.Rotate(math.pi, alignment=ft.Alignment.CENTER) if expanded else None
+        )
+        if expanded:
+            body.content = self._probe_content_for(strategy_id)
+            body.height = None
+            body.opacity = 1
+            body.padding = _probe_body_padding(expanded=True)
+            body.clip_behavior = ft.ClipBehavior.HARD_EDGE
+        else:
+            body.content = None
+            body.height = 0
+            body.opacity = 0
+            body.padding = _probe_body_padding(expanded=False)
+
+        updated = False
+        for control in (chevron, body):
+            if control.page:
+                try:
+                    control.update()
+                    updated = True
+                except RuntimeError:
+                    pass
+        if not updated and self._strategy_list.page:
+            try:
+                self._strategy_list.update()
+            except RuntimeError:
+                pass
+
+    def _update_probe_only(self, strategy_id: str) -> None:
+        body = self._probe_body_by_id.get(strategy_id)
+        if not body or strategy_id not in self._expanded:
+            return
+        if not _should_build_probe_table(strategy_id):
+            return
+        body.content = build_probe_table(strategy_id)
+        if body.page:
+            try:
+                body.update()
+            except RuntimeError:
+                pass
+
+    def _update_row(self, strategy_id: str) -> None:
+        strategy = self._strategies_by_id.get(strategy_id)
+        index = self._row_index.get(strategy_id)
+        if strategy is None or index is None:
+            return
+        self._strategy_list.controls[index] = self._build_strategy_row(strategy)
+        self._row_index[strategy_id] = index
+        if self._strategy_list.page:
+            try:
+                self._strategy_list.update()
+            except RuntimeError:
+                pass
+
+    def _apply_probe_updates(self, strategy_ids: set[str]) -> None:
+        for strategy_id in strategy_ids:
+            self._update_probe_only(strategy_id)
+
+    def _schedule_probe_updates(self, strategy_id: str) -> None:
+        with self._probe_timer_lock:
+            self._probe_dirty.add(strategy_id)
+            if self._probe_flush_timer is not None:
+                return
+            self._probe_flush_timer = threading.Timer(0.12, self._flush_probe_updates)
+            self._probe_flush_timer.daemon = True
+            self._probe_flush_timer.start()
+
+    def _flush_probe_updates(self) -> None:
+        with self._probe_timer_lock:
+            pending = set(self._probe_dirty)
+            self._probe_dirty.clear()
+            self._probe_flush_timer = None
+        if pending:
+            self._ui(lambda: self._apply_probe_updates(pending))
+
+    def _handle_status_change(self, strategy_id: str | None) -> None:
+        desired = [s.id for s in self._sorted_strategies()]
+        current_ids = sorted(self._row_index.keys(), key=lambda sid: self._row_index[sid])
+        if desired != current_ids and len(desired) == len(current_ids):
+            row_by_id = {
+                sid: self._strategy_list.controls[idx] for sid, idx in self._row_index.items()
+            }
+            self._strategy_list.controls = [row_by_id[sid] for sid in desired]
+            self._row_index = {sid: index for index, sid in enumerate(desired)}
+
+        current = tr.current_strategy_id()
+        touch = {sid for sid in (self._last_current_id, current, strategy_id) if sid}
+        for sid in touch:
+            if sid in self._row_index:
+                self._update_row(sid)
+        self._last_current_id = current
+
+        if self._strategy_list.page:
+            try:
+                self._strategy_list.update()
+            except RuntimeError:
+                pass
+
+    def _on_results_change(self, change: ResultChange) -> None:
+        if change.event == "probe" and change.strategy_id:
+            self._schedule_probe_updates(change.strategy_id)
+            return
+        if change.event == "status":
+            self._ui(lambda: self._handle_status_change(change.strategy_id))
+            return
+        self._ui(self._refresh_list)
+
+    def _refresh_list(self) -> None:
+        self._populate_list()
+        if not self._strategy_list.page:
+            return
+        try:
+            self._strategy_list.update()
+            if self._start_btn and self._start_btn.page:
+                self._start_btn.update()
+            if self._stop_btn and self._stop_btn.page:
+                self._stop_btn.update()
+            if self._status_text and self._status_text.page:
+                self._status_text.update()
+            if self._strategy_header and self._strategy_header.page:
+                self._strategy_header.update()
+            if self._strategy_actions and self._strategy_actions.page:
+                self._strategy_actions.update()
+        except RuntimeError:
+            pass
+
+    def _rebuild_list(self) -> None:
+        self._refresh_list()
+
+    def _build_strategy_row(self, strategy: Strategy) -> ft.Control:
+        sid = strategy.id
+        expanded = sid in self._expanded
+        is_running = tr.current_strategy_id() == sid
+
+        checkbox = ft.Checkbox(
+            value=sid in self._selected,
+            label="",
+            on_change=lambda e, strategy_id=sid: self._on_strategy_toggle(strategy_id, bool(e.control.value)),
+        )
+        self._checkboxes[sid] = checkbox
+
+        def toggle_select(_: ft.ControlEvent) -> None:
+            checked = sid not in self._selected
+            checkbox.value = checked
+            self._on_strategy_toggle(sid, checked)
+
+        def toggle_expand(_: ft.ControlEvent) -> None:
+            if sid in self._expanded:
+                self._expanded.discard(sid)
+            else:
+                self._expanded.add(sid)
+            self._apply_expand_state(sid)
+
+        chevron = ft.Icon(
+            ft.Icons.EXPAND_MORE,
+            color=T.TEXT_MUTED,
+            size=18,
+            animate_rotation=CHEVRON_ANIM,
+            rotate=ft.Rotate(math.pi, alignment=ft.Alignment.CENTER) if expanded else None,
+        )
+        self._chevron_by_id[sid] = chevron
+
+        right_controls: list[ft.Control] = []
+        if is_running:
+            right_controls.append(factiosi_spinner(size=14))
+        right_controls.extend(
+            [
+                _status_pill_for(sid),
+                ft.Container(content=chevron, padding=4, border_radius=6),
+            ]
+        )
+
+        select_zone = ft.Container(
+            content=ft.Row(
+                [
+                    checkbox,
+                    ui_text(strategy.display_name, expand=True),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            expand=4,
+            padding=ft.Padding.only(left=8, top=10, bottom=10, right=0),
+            on_click=bind_select_dismiss(toggle_select),
+        )
+        expand_zone = ft.Container(
+            content=ft.Row(
+                right_controls,
+                spacing=8,
+                alignment=ft.MainAxisAlignment.END,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            expand=6,
+            padding=ft.Padding.only(left=0, top=10, bottom=10, right=8),
+            on_click=bind_select_dismiss(toggle_expand),
+        )
+
+        header = ft.Container(
+            content=ft.Row(
+                [select_zone, expand_zone],
+                spacing=0,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            border_radius=10,
+        )
+
+        body = ft.Container(
+            content=self._probe_content_for(sid) if expanded else None,
+            height=None if expanded else 0,
+            opacity=1 if expanded else 0,
+            padding=_probe_body_padding(expanded=expanded),
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+            animate=EXPAND_ANIM,
+            animate_opacity=EXPAND_ANIM,
+        )
+        self._probe_body_by_id[sid] = body
+
+        return ft.Container(
+            content=ft.Column(
+                [header, body],
+                spacing=0,
+                tight=True,
+            ),
+            bgcolor=T.ELEVATED,
+            border_radius=12,
+        )
+
+    def build(self) -> ft.Control:
+        settings = get_settings()
+        version = settings.active_version
+        self._strategies = list_strategies(settings)
+        self._strategies_by_id = {s.id: s for s in self._strategies}
+        self._selected.clear()
+
+        tr.subscribe(self._on_results_change)
+        self._results_unsubscribe = lambda: tr.unsubscribe(self._on_results_change)
+
+        test_type_group = ft.RadioGroup(
+            value=self._test_type,
+            content=ft.Column(
+                [
+                    ft.Radio(
+                        label="Стандартный тест (HTTP / Ping)",
+                        value="standard",
+                        label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
+                    ),
+                    ft.Radio(
+                        label="Проверка DPI (TCP 16-20 freeze)",
+                        value="dpi",
+                        label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
+                    ),
+                ],
+                spacing=4,
+                tight=True,
+            ),
+            on_change=self._on_test_type_change,
+        )
+
+        self._master_checkbox = ft.Checkbox(
+            label="Все стратегии",
+            value=False,
+            label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
+            on_change=self._on_master_toggle,
+        )
+
+        self._start_btn = pill_button(
+            "Запуск тестов",
+            primary=True,
+            on_click=self._start_tests,
+            disabled=not self._strategies or not version,
+        )
+        self._stop_btn = pill_button(
+            "Остановка тестов",
+            on_click=self._stop_tests,
+            disabled=True,
+        )
+        self._status_text = ui_text("", size=12, color=T.TEXT_MUTED)
+
+        self._strategy_actions = ft.Row(
+            [self._start_btn, self._stop_btn],
+            spacing=8,
+            wrap=True,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+        self._strategy_header = ft.Row(
+            [self._master_checkbox],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+        self._strategy_list_panel = ft.Column(
+            [self._strategy_header, self._strategy_list],
+            spacing=4,
+            tight=True,
+        )
+
+        if not version:
+            self._strategy_list.controls = [
+                ui_text("Сначала установите версию flowseal.", color=T.TEXT_MUTED),
+            ]
+        else:
+            self._populate_list()
+
+        return scroll_page(
+            block_section("Тип тестирования", test_type_group),
+            block_section(
+                "Стратегии к тестированию",
+                self._strategy_actions,
+                self._status_text,
+                ft.Divider(height=1, color=T.BORDER),
+                self._strategy_list_panel,
+            ),
+            page=self.page,
+        )
+
+    def _on_test_type_change(self, e: ft.ControlEvent) -> None:
+        if e.control.value:
+            self._test_type = str(e.control.value)
+
+    def _on_master_toggle(self, e: ft.ControlEvent) -> None:
+        if e.control.value:
+            self._selected = {s.id for s in self._strategies}
+        else:
+            self._selected.clear()
+        for sid, checkbox in self._checkboxes.items():
+            checkbox.value = sid in self._selected
+        self._update_buttons()
+        self.page.update()
+
+    def _on_strategy_toggle(self, strategy_id: str, checked: bool) -> None:
+        if checked:
+            self._selected.add(strategy_id)
+        else:
+            self._selected.discard(strategy_id)
+        if self._master_checkbox:
+            self._master_checkbox.value = bool(self._strategies) and len(self._selected) == len(self._strategies)
+        self._update_buttons()
+        self.page.update()
+
+    def _update_buttons(self) -> None:
+        running = self._runner.running
+        if self._start_btn:
+            set_pill_disabled(self._start_btn, running or not self._selected)
+        if self._stop_btn:
+            set_pill_disabled(self._stop_btn, not running)
+
+    def _snack(self, message: str, *, error: bool = False) -> None:
+        if self._status_text:
+            self._status_text.value = message
+            self._status_text.color = T.STATUS_ERROR if error else T.TEXT_MUTED
+        self.page.snack_bar = ft.SnackBar(
+            ft.Text(message),
+            bgcolor=T.STATUS_ERROR if error else T.ELEVATED,
+        )
+        self.page.snack_bar.open = True
+        self.page.update()
+
+    def _start_tests(self, _: ft.ControlEvent) -> None:
+        settings = get_settings()
+        if not settings.active_version or not self._selected:
+            return
+        for sid in self._selected:
+            self._expanded.add(sid)
+            self._apply_expand_state(sid)
+        self._update_buttons()
+        if self._strategy_list.page:
+            try:
+                self._strategy_list.update()
+            except RuntimeError:
+                pass
+        job = StrategyTestJob(
+            version=settings.active_version,
+            test_type=self._test_type,
+            strategy_ids=sorted(self._selected),
+        )
+
+        def on_done(ok: bool, msg: str) -> None:
+            def finish() -> None:
+                self._update_buttons()
+                if self._status_text:
+                    self._status_text.value = msg if ok else f"Ошибка: {msg}"
+                    self._status_text.color = T.STATUS_ERROR if not ok else T.TEXT_MUTED
+                self._refresh_list()
+
+            self._ui(finish)
+
+        ok, msg = self._runner.start(job, on_done=on_done)
+        if ok:
+            self._update_buttons()
+            if self._status_text:
+                self._status_text.value = msg
+            self.page.update()
+        else:
+            self._snack(msg, error=True)
+
+    def _stop_tests(self, _: ft.ControlEvent) -> None:
+        self._runner.stop()
+        self._update_buttons()
+        if self._status_text:
+            self._status_text.value = "Тесты остановлены."
+        self.page.update()

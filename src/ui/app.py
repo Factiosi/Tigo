@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import threading
+
 import flet as ft
 
 from src.core.branding import app_window_icon_path
 from src.core.events import subscribe, unsubscribe
 from src.core.fonts import register_mono_font
-from src.core.paths import APP_NAME
+from src.core.paths import APP_NAME, is_packaged_app
 from src.core.version import __version__
 from src.core.settings import get_settings, save_settings
 from src.modules.strategies.repository import has_flowseal_strategies
+from src.modules.updates.app import (
+    MSG_APP_UP_TO_DATE,
+    check_and_install_app,
+    check_app_only,
+)
 from src.theme import T, apply_theme, build_flet_theme, build_theme_tokens
 from src.modules.lifecycle.public import handle_window_close, should_start_hidden
 from src.ui.components import ANIM, close_active_select, ui_text
@@ -19,6 +26,7 @@ from src.ui.pages.home import HomePage
 from src.ui.pages.lists import ListsPage
 from src.ui.pages.strategies import StrategiesPage
 from src.ui.pages.settings import SettingsPage
+from src.ui.notifications import show_toast
 
 
 def build_nav_items() -> list[tuple[str, str, str, str]]:
@@ -52,6 +60,7 @@ class TigoApp:
         self._home_page: HomePage | None = None
         self._strategies_page: StrategiesPage | None = None
         self._strategies_changed_handler = self._on_strategies_changed
+        self._app_update_started = False
 
     def _on_strategies_changed(self) -> None:
         if not self.page:
@@ -81,6 +90,41 @@ class TigoApp:
         unsubscribe("strategies_changed", self._strategies_changed_handler)
         subscribe("strategies_changed", self._strategies_changed_handler)
         self._navigate(self._route)
+        self._start_app_update_check()
+
+    def _start_app_update_check(self) -> None:
+        settings = get_settings()
+        if (
+            self._app_update_started
+            or not is_packaged_app()
+            or not settings.auto_check_app_updates_on_startup
+        ):
+            return
+        self._app_update_started = True
+
+        def work() -> None:
+            result = (
+                check_and_install_app()
+                if settings.auto_install_app_updates
+                else check_app_only()
+            )
+            ok, message, kind = result
+            if ok and message == MSG_APP_UP_TO_DATE:
+                return
+
+            def notify() -> None:
+                show_toast(self.page, message, kind=kind if ok else "error")
+
+            try:
+                self.page.run_thread(notify)
+            except AttributeError:
+                notify()
+
+        threading.Thread(
+            target=work,
+            daemon=True,
+            name="tigo-app-update-check",
+        ).start()
 
     def _configure_page(self) -> None:
         page = self.page
@@ -244,8 +288,8 @@ class TigoApp:
             self._strategies_page = None
 
         self._route = route
-        self.page._z1ui_route = route  # type: ignore[attr-defined]
-        self.page._z1ui_nav_index = self._route_index(route)  # type: ignore[attr-defined]
+        self.page._tigo_route = route  # type: ignore[attr-defined]
+        self.page._tigo_nav_index = self._route_index(route)  # type: ignore[attr-defined]
         self._refresh_nav()
 
         titles = {rid: label for rid, label, *_ in build_nav_items()}
@@ -288,7 +332,7 @@ class TigoApp:
             self._home_page.on_mounted()
 
     def _reload_shell(self) -> None:
-        route = getattr(self.page, "_z1ui_route", self._route)
+        route = getattr(self.page, "_tigo_route", self._route)
         settings = get_settings()
         if settings.strategy_source == "custom" and route in ("strategies", "lists"):
             route = "home"
@@ -317,6 +361,10 @@ class TigoApp:
 
 def main(page: ft.Page) -> None:
     TigoApp(page).show()
+    if not should_start_hidden():
+        page.window.minimized = False
+        page.window.visible = True
+        page.update()
 
 
 __all__ = ["TigoApp", "build_nav_items", "main"]

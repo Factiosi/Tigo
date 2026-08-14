@@ -25,6 +25,7 @@ run.py (GUI)
 ```
 
 **Сборка release:** [`docs/BUILD.md`](docs/BUILD.md) (Nuitka standalone, Windows).
+**Локальная автоматизация:** [`docs/AUTOMATION.md`](docs/AUTOMATION.md) (MCP stdio, dev/test only).
 
 ## Архитектура
 
@@ -34,7 +35,7 @@ src/
 ├── kernel/         # ядро: запуск/остановка winws, мониторинг, runtime state
 ├── modules/        # функциональные модули
 │   ├── strategies/       # парсинг .bat, репозиторий, launcher
-│   ├── strategy_testing/ # раннер тестов, probe, in-memory journal
+│   ├── strategy_testing/ # daemon-раннер тестов, probe, cache результатов
 │   ├── updates/          # GitHub releases, transformer
 │   └── filters/          # game filter, ipset, tcp timestamps
 └── ui/             # Flet: pages, components, windows/debug_console
@@ -46,15 +47,15 @@ src/
 |------|-----------------|------------|
 | **kernel** | `WinwsLaunchSpec` → start/stop winws, PID monitor | стратегиях, UI, тестах |
 | **modules/strategies** | `.bat` → args, репозиторий, `build_winws_launch()` | UI |
-| **modules/strategy_testing** | start→probe→stop, журнал тестов (RAM) | персистентности результатов |
+| **modules/strategy_testing** | daemon: start→probe→stop; cache результатов по версии | UI |
 | **core/debug_log** | always-on журнал, TTL 1 час | UI (только pub/sub) |
 | **ui** | страницы, snackbar, debug console window | бизнес-логике |
 
 ### Поток запуска winws
 
 ```
-UI/modules → strategies.launcher.build_winws_launch(strategy) → WinwsLaunchSpec
-          → kernel.public.start(spec) → winws_runner → subprocess (CREATE_NO_WINDOW)
+GUI → daemon IPC → strategies.launcher.build_winws_launch(strategy) → WinwsLaunchSpec
+                → kernel.public.start(spec) → winws_runner → subprocess (CREATE_NO_WINDOW)
 ```
 
 Kernel **не** парсит стратегии — только принимает готовый `WinwsLaunchSpec`.
@@ -71,22 +72,25 @@ Kernel **не** парсит стратегии — только принима�
 | user lists | `%APPDATA%\Tigo\strategies\flowseal\user_lists\` |
 | fake bins | `%APPDATA%\Tigo\strategies\flowseal\bin\` |
 | settings | `%APPDATA%\Tigo\settings.json` |
-| reference-материалы | `reference/` (не часть приложения, в .gitignore) |
+| результаты тестов | `%APPDATA%\Tigo\cache\test_results.json` |
 
 ## Ключевые решения
 
 1. **Модульность** — core + kernel + modules + ui. Новый функционал = новый модуль в `modules/`, логирование через `core.debug_log`.
-2. **Результаты тестов не сохраняются** — только in-memory журнал на странице «Подбор стратегий» (`modules/strategy_testing/journal.py`). Никакого `test_status.json`.
-3. **Debug console** — отдельный процесс (`debug_console_app.py`), лог через `%APPDATA%\\Tigo\\debug.log`, TTL 1 час.
+2. **Результаты тестов сохраняются по версии Flowseal** — daemon пишет `%APPDATA%\Tigo\cache\test_results.json`, GUI перечитывает cache через IPC polling. Журнал текущего запуска остаётся in-memory.
+3. **Debug console** — отдельный процесс (`run.py --debug-console`), UI entrypoint в `src/ui/windows/debug_console_app.py`, лог через `%APPDATA%\\Tigo\\debug.log`, TTL 1 час.
 4. **Home page без inline-консоли** — статус через pill + snackbar; детали в debug console.
-5. **Unit-тестов в репозитории нет** — проверки стратегий вручную через UI (`modules/strategy_testing/`).
+5. **winws принадлежит только daemon** — GUI не запускает и не завершает процесс напрямую, включая подбор стратегий.
+6. **Automation ограничена** — source daemon разрешает MCP-команды; compiled daemon требует `TIGO_AUTOMATION=1`.
+7. **Runtime обязателен и независим от стратегий** — при отсутствии `bin/winws.exe` daemon скачивает официальный релиз Flowseal независимо от `strategy_source` и настроек автообновления.
+8. **Самообновление Tigo** — проверка GitHub Releases (`Tigo-Setup-X.Y.Z.exe` + `.sha256`); автопроверка включена, автоустановка выключена.
+9. **Массовые тесты** — daemon владеет probe snapshot; GUI раскрывает только текущую стратегию, пауза 2 с, затем все завершённые.
 
 ## Осознанные «странности»
 
 - **`kernel/service_api.py`** — legacy Win32 SCM API, используется только в `migrate.py` для удаления старого сервиса `zapret`. Deprecated для обычного запуска.
-- **DPI-тест в UI** — radio есть, backend не реализован (`strategy_testing/runner.py` отклоняет `test_type != "standard"`).
+- **DPI-тест** — backend пока не реализован; radio в UI отключён.
 - **winws stdout → DEVNULL** — пользователь не видит консоль winws; stderr читается только при immediate exit.
-- **`reference/`** — upstream flowseal и zapretgui для справки агентов, не импортируется приложением.
 - **Имя repo Z2UI vs app Tigo** — намеренно не синхронизировано.
 
 ## Как добавить модуль
@@ -107,7 +111,6 @@ python run.py
 
 - DNS — `modules/dns/`, UI-страница `ui/pages/dns.py`.
 - Режим «Своя стратегия» — `settings.strategy_source == "custom"`, скрывает подбор стратегий и редактирование листов.
-- Редизайн UI тестов (запланирован отдельно).
 - Переименование Tigo / папки репозитория.
 
 ## UI: кастомный select и overlay

@@ -12,7 +12,7 @@
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt -r requirements-build.txt
+.venv\Scripts\python -m pip install -r requirements\base.txt -r requirements\build.txt
 ```
 
 ## Ассеты (ico / tray)
@@ -30,7 +30,41 @@ cd ..
 powershell -ExecutionPolicy Bypass -File tools\build_nuitka.ps1
 ```
 
-Результат: `dist\Tigo\Tigo.exe` + `dist\Tigo\flet\flet.exe` + `dist\Tigo\logos\`.
+Скрипт пересоздаёт `dist\Tigo\` и после успешной сборки удаляет промежуточный `dist\run.build\`.
+
+Результат: **вся папка** `dist\Tigo\` — `Tigo.exe`, `flet_client\`, `logos\`, DLL и прочие зависимости Nuitka. Локальные `bin\` и `utils\` намеренно не копируются.
+
+> **Важно:** распространяйте или копируйте **целиком папку** `dist\Tigo\`, а не один `Tigo.exe`. Без `flet_client\` и соседних DLL приложение не запустится.
+
+`Tigo.exe` собран с UAC-манifest (запуск от администратора). Двойной клик: UAC → фоновый daemon (трей) → GUI.
+
+## Installer (Inno Setup)
+
+После standalone-сборки скомпилируйте [`tools/tigo_installer.iss`](../tools/tigo_installer.iss):
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" tools\tigo_installer.iss
+```
+
+Результат: `dist\installer\Tigo-Setup-1.1.0.exe`. Версия в `.iss` должна совпадать с `src\core\version.py`.
+
+Installer устанавливает всю папку standalone в `{autopf}\Tigo`. При удалении он очищает установленный runtime и задачу `Tigo Autostart`, но сохраняет настройки и пользовательские данные в `%APPDATA%\Tigo`.
+
+## Выпуск релиза
+
+Проверка без изменений GitHub:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\deploy_release.ps1 -Version 1.1.0 -DryRun
+```
+
+Публикация выполняется только из чистой ветки `master` после commit:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\deploy_release.ps1 -Version 1.1.0 -Publish
+```
+
+Скрипт запускает unit-тесты, пересобирает standalone, проверяет отсутствие MCP и стороннего runtime, создаёт installer и SHA-256, отправляет `master`, tag `v1.1.0` и GitHub Release.
 
 ## Проверка
 
@@ -38,11 +72,16 @@ powershell -ExecutionPolicy Bypass -File tools\build_nuitka.ps1
 dist\Tigo\Tigo.exe --daemon
 dist\Tigo\Tigo.exe
 dist\Tigo\Tigo.exe --debug-console
+.venv\Scripts\python tools\smoke_ipc_ping.py
 ```
+
+Дополнительно проверьте: второй `--daemon` не создаёт новый экземпляр; start/stop и подбор стратегий выполняются без консольных окон; debug console открывается из GUI.
+
+Для automation smoke-test compiled daemon можно запустить с временным `$env:TIGO_AUTOMATION = "1"` и подключить MCP по инструкции [`AUTOMATION.md`](AUTOMATION.md). Без флага расширенные automation-команды в release отключены.
 
 ## winws runtime
 
-`bin\` и `utils\` **не входят** в git и не встраиваются в exe. Для локального теста скопируйте их рядом с `Tigo.exe` или получите через обновление стратегий Flowseal в настройках (файлы в `%APPDATA%\Tigo\`).
+`bin\` и `utils\` **не входят** в git, standalone и installer. При первом запуске daemon независимо от настроек стратегий получает обязательный runtime из официального релиза Flowseal. Перед распространением проверьте, что installer не содержит сторонний runtime.
 
 ## Архитектура
 

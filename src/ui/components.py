@@ -1,4 +1,4 @@
-"""Factiosi UI helpers for Z1UI."""
+"""Factiosi UI helpers for Tigo."""
 
 from __future__ import annotations
 
@@ -309,11 +309,11 @@ def block_section(title: str | None, *controls: ft.Control) -> ft.Container:
 
 
 def _register_page_scroll(page: ft.Page, view: ft.ListView) -> None:
-    page._z1ui_page_scroll = view  # type: ignore[attr-defined]
-    page._z1ui_page_scroll_offset = 0  # type: ignore[attr-defined]
+    page._tigo_page_scroll = view  # type: ignore[attr-defined]
+    page._tigo_page_scroll_offset = 0  # type: ignore[attr-defined]
 
     def track_scroll(e: ft.OnScrollEvent) -> None:
-        page._z1ui_page_scroll_offset = e.pixels  # type: ignore[attr-defined]
+        page._tigo_page_scroll_offset = e.pixels  # type: ignore[attr-defined]
         if _select_scroll_reposition is not None:
             _select_scroll_reposition(e.pixels)
 
@@ -643,7 +643,7 @@ def make_select(
         field_left, field_top, open_upward, menu_height = placement
         state["anchor_field_top"] = field_top
         state["anchor_field_left"] = field_left
-        state["anchor_scroll"] = getattr(page, "_z1ui_page_scroll_offset", 0) or 0
+        state["anchor_scroll"] = getattr(page, "_tigo_page_scroll_offset", 0) or 0
         state["anchor_menu_height"] = menu_height
         open_upward = _apply_overlay_position(field_top, field_left, open_upward)
         scale_origin = (

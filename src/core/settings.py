@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Literal
 
 from src.core.paths import bootstrap_settings_path, default_app_data_root
 from src.theme import PortalHue, ThemeMode
+
+_write_lock = threading.RLock()
 
 GameFilterMode = Literal["off", "all", "tcp", "udp"]
 IpsetFilterMode = Literal["loaded", "none", "any"]
@@ -28,7 +32,7 @@ class AppSettings:
     keep_version_count: int = 2
     auto_check_updates_on_startup: bool = True
     auto_promote_updates: bool = True
-    auto_check_app_updates_on_startup: bool = False
+    auto_check_app_updates_on_startup: bool = True
     auto_install_app_updates: bool = False
     theme_mode: ThemeMode = "dark"
     portal_hue: PortalHue = "blue"
@@ -50,6 +54,8 @@ class AppSettings:
             data = json.loads(file_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return cls()
+        if not isinstance(data, dict):
+            return cls()
         if data.get("version_retention") == "keep_n":
             data["version_retention"] = "keep_previous"
             data["keep_version_count"] = 2
@@ -60,10 +66,19 @@ class AppSettings:
     def save(self, path: Path | None = None) -> None:
         file_path = path or bootstrap_settings_path()
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(
-            json.dumps(asdict(self), ensure_ascii=False, indent=2),
-            encoding="utf-8",
+        payload = json.dumps(asdict(self), ensure_ascii=False, indent=2) + "\n"
+        tmp = file_path.with_name(
+            f".{file_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
+        with _write_lock:
+            try:
+                tmp.write_text(payload, encoding="utf-8")
+                os.replace(tmp, file_path)
+            finally:
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 _settings: AppSettings | None = None

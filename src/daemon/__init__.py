@@ -1,1 +1,1 @@
-"""Z1UI background daemon — tray, winws lifecycle, IPC."""
+"""Tigo background daemon — tray, winws lifecycle, IPC."""

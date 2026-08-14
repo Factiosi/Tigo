@@ -91,6 +91,33 @@ def find_canonical_winws_pids() -> list[int]:
     return pids
 
 
+def find_foreign_winws_processes() -> list[tuple[int, str]]:
+    """Return queryable winws.exe processes launched outside Tigo's bin directory."""
+    expected = _normalize_path(str(expected_winws_path()))
+    kernel32 = ctypes.windll.kernel32
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot in (-1, 0xFFFFFFFF):
+        return []
+
+    entry = PROCESSENTRY32W()
+    entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+    foreign: list[tuple[int, str]] = []
+    try:
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return []
+        while True:
+            if entry.szExeFile.lower() == "winws.exe":
+                pid = int(entry.th32ProcessID)
+                image = _query_image_path(pid)
+                if image and image != expected:
+                    foreign.append((pid, image))
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return foreign
+
+
 def is_canonical_winws_running() -> tuple[bool, int | None]:
     pids = find_canonical_winws_pids()
     if not pids:

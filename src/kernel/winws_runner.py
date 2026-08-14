@@ -12,6 +12,7 @@ from src.core.debug_log import debug
 from src.kernel import runtime_state
 from src.kernel.launch_spec import WinwsLaunchSpec
 from src.kernel.process_probe import find_canonical_winws_pids, is_canonical_winws_running
+from src.kernel.windows_errors import describe_windows_error
 
 CREATE_NO_WINDOW = 0x08000000
 KILL_TIMEOUT = 4.0
@@ -102,6 +103,9 @@ class WinwsRunner:
             message = f"winws завершился сразу после запуска (код {code})."
             if detail:
                 message = f"{message} {detail}"
+            hint = describe_windows_error(code)
+            if hint and hint not in message:
+                message = f"{message} {hint}"
             self._phase = RunnerPhase.FAILED
             self._error = message
             self._proc = None

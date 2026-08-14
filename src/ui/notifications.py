@@ -1,4 +1,4 @@
-"""Top toast banners — Factiosi feedback pattern for Z1UI."""
+"""Top toast banners — Factiosi feedback pattern for Tigo."""
 
 from __future__ import annotations
 

@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import threading
 from typing import Callable
 
 import flet as ft
 
-from src.core.settings import get_settings
+from src.core.settings import get_settings, save_settings
+from src.daemon.ipc import (
+    daemon_start,
+    daemon_stop,
+    daemon_test_start,
+    daemon_test_status,
+    daemon_test_stop,
+)
+from src.kernel.public import get_effective_runtime_status
 from src.modules.strategies.models import Strategy
 from src.modules.strategies.repository import list_strategies
 from src.modules.strategy_testing import results as tr
 from src.modules.strategy_testing.results import ResultChange
-from src.modules.strategy_testing.runner import StrategyTestJob, StrategyTestRunner
 from src.theme import T
 from src.ui.components import (
     CHEVRON_ANIM,
@@ -23,10 +31,10 @@ from src.ui.components import (
     pill_button,
     scroll_page,
     set_pill_disabled,
-    status_pill,
     ui_text,
 )
 from src.ui.probe_table import build_probe_table, factiosi_spinner
+from src.ui.strategy_status import strategy_actions_disabled, strategy_status_pill
 
 
 def _probe_body_padding(*, expanded: bool) -> ft.Padding:
@@ -35,29 +43,40 @@ def _probe_body_padding(*, expanded: bool) -> ft.Padding:
     return ft.Padding.only(left=28, right=12, bottom=12, top=4)
 
 
-def _status_pill_for(strategy_id: str) -> ft.Control:
-    item = tr.get_result(strategy_id)
-    if not item:
-        return status_pill("offline", "Не протестирована")
-    mapping = {
-        "full": ("active", "Полностью работает (лучший выбор)"),
-        "partial": ("expiring", "Частично работает"),
-        "failed": ("error", "Не работает"),
-        "unknown": ("expiring", "Неизвестно"),
-    }
-    key, label = mapping.get(item.state, ("offline", "Не протестирована"))
-    return status_pill(key, label)
-
-
 def _should_build_probe_table(strategy_id: str) -> bool:
     return True
+
+
+def test_expanded_state(
+    *,
+    running: bool,
+    current_strategy_id: str | None,
+    session_active: bool,
+    completed_strategy_ids: set[str],
+    current_expanded: set[str],
+) -> set[str]:
+    """Pure expansion policy used by the daemon polling state machine."""
+    if running and current_strategy_id:
+        return {current_strategy_id}
+    if not running and session_active:
+        return set(completed_strategy_ids)
+    return set(current_expanded)
 
 
 class StrategiesPage:
     def __init__(self, page: ft.Page) -> None:
         self.page = page
-        self._runner = StrategyTestRunner()
         self._test_type = "standard"
+        self._tests_running = False
+        self._polling = False
+        self._last_daemon_current: str | None = None
+        self._seen_daemon_completed: set[str] = set()
+        self._last_daemon_message = ""
+        self._last_daemon_success = True
+        self._test_phase = "idle"
+        self._focused_strategy_id: str | None = None
+        self._session_completed: set[str] = set()
+        self._session_active = False
         self._selected: set[str] = set()
         self._expanded: set[str] = set()
         self._checkboxes: dict[str, ft.Checkbox] = {}
@@ -81,6 +100,7 @@ class StrategiesPage:
         self._last_current_id: str | None = None
 
     def stop(self) -> None:
+        self._polling = False
         with self._probe_timer_lock:
             if self._probe_flush_timer:
                 self._probe_flush_timer.cancel()
@@ -92,7 +112,7 @@ class StrategiesPage:
 
     def _strategy_sort_key(self, strategy: Strategy) -> tuple[int, str]:
         sid = strategy.id
-        if tr.current_strategy_id() == sid:
+        if self._focused_strategy_id == sid or tr.current_strategy_id() == sid:
             return (0, strategy.display_name.lower())
 
         item = tr.get_result(sid)
@@ -118,10 +138,6 @@ class StrategiesPage:
             fn()
 
     def _populate_list(self) -> None:
-        current_id = tr.current_strategy_id()
-        if current_id and current_id in self._selected:
-            self._expanded.add(current_id)
-
         rows: list[ft.Control] = []
         self._row_index.clear()
         self._probe_body_by_id.clear()
@@ -141,44 +157,29 @@ class StrategiesPage:
     def _probe_content_for(self, strategy_id: str) -> ft.Control | None:
         if not _should_build_probe_table(strategy_id):
             return None
-        return build_probe_table(strategy_id)
-
-    def _apply_expand_state(self, strategy_id: str) -> None:
-        body = self._probe_body_by_id.get(strategy_id)
-        chevron = self._chevron_by_id.get(strategy_id)
-        if body is None or chevron is None:
-            self._update_row(strategy_id)
-            return
-
-        expanded = strategy_id in self._expanded
-        chevron.rotate = (
-            ft.Rotate(math.pi, alignment=ft.Alignment.CENTER) if expanded else None
+        disabled = strategy_actions_disabled(
+            strategy_id,
+            selected_strategy=get_settings().selected_strategy,
+            tests_running=self._tests_running,
         )
-        if expanded:
-            body.content = self._probe_content_for(strategy_id)
-            body.height = None
-            body.opacity = 1
-            body.padding = _probe_body_padding(expanded=True)
-            body.clip_behavior = ft.ClipBehavior.HARD_EDGE
-        else:
-            body.content = None
-            body.height = 0
-            body.opacity = 0
-            body.padding = _probe_body_padding(expanded=False)
-
-        updated = False
-        for control in (chevron, body):
-            if control.page:
-                try:
-                    control.update()
-                    updated = True
-                except RuntimeError:
-                    pass
-        if not updated and self._strategy_list.page:
-            try:
-                self._strategy_list.update()
-            except RuntimeError:
-                pass
+        actions = ft.Row(
+            [
+                pill_button(
+                    "Выбрать стратегию",
+                    on_click=lambda _e, sid=strategy_id: self._choose_strategy(sid),
+                    disabled=disabled,
+                ),
+                pill_button(
+                    "Выбрать стратегию и запустить",
+                    primary=True,
+                    on_click=lambda _e, sid=strategy_id: self._choose_and_start(sid),
+                    disabled=disabled,
+                ),
+            ],
+            spacing=8,
+            wrap=True,
+        )
+        return ft.Column([build_probe_table(strategy_id), actions], spacing=10, tight=True)
 
     def _update_probe_only(self, strategy_id: str) -> None:
         body = self._probe_body_by_id.get(strategy_id)
@@ -186,7 +187,7 @@ class StrategiesPage:
             return
         if not _should_build_probe_table(strategy_id):
             return
-        body.content = build_probe_table(strategy_id)
+        body.content = self._probe_content_for(strategy_id)
         if body.page:
             try:
                 body.update()
@@ -284,7 +285,7 @@ class StrategiesPage:
     def _build_strategy_row(self, strategy: Strategy) -> ft.Control:
         sid = strategy.id
         expanded = sid in self._expanded
-        is_running = tr.current_strategy_id() == sid
+        is_running = self._test_phase == "testing" and self._focused_strategy_id == sid
 
         checkbox = ft.Checkbox(
             value=sid in self._selected,
@@ -299,11 +300,13 @@ class StrategiesPage:
             self._on_strategy_toggle(sid, checked)
 
         def toggle_expand(_: ft.ControlEvent) -> None:
+            if self._tests_running:
+                return
             if sid in self._expanded:
                 self._expanded.discard(sid)
             else:
                 self._expanded.add(sid)
-            self._apply_expand_state(sid)
+            self._update_row(sid)
 
         chevron = ft.Icon(
             ft.Icons.EXPAND_MORE,
@@ -319,7 +322,7 @@ class StrategiesPage:
             right_controls.append(factiosi_spinner(size=14))
         right_controls.extend(
             [
-                _status_pill_for(sid),
+                strategy_status_pill(sid),
                 ft.Container(content=chevron, padding=4, border_radius=6),
             ]
         )
@@ -399,8 +402,9 @@ class StrategiesPage:
                         label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
                     ),
                     ft.Radio(
-                        label="Проверка DPI (TCP 16-20 freeze)",
+                        label="Проверка DPI — пока недоступна",
                         value="dpi",
+                        disabled=True,
                         label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
                     ),
                 ],
@@ -456,6 +460,8 @@ class StrategiesPage:
         else:
             self._populate_list()
 
+        self._polling = True
+        self.page.run_task(self._poll_test_state)
         return scroll_page(
             block_section("Тип тестирования", test_type_group),
             block_section(
@@ -493,7 +499,7 @@ class StrategiesPage:
         self.page.update()
 
     def _update_buttons(self) -> None:
-        running = self._runner.running
+        running = self._tests_running
         if self._start_btn:
             set_pill_disabled(self._start_btn, running or not self._selected)
         if self._stop_btn:
@@ -510,47 +516,181 @@ class StrategiesPage:
         self.page.snack_bar.open = True
         self.page.update()
 
+    def _choose_strategy(self, strategy_id: str) -> None:
+        if self._tests_running or not tr.is_tested(strategy_id):
+            return
+        settings = get_settings()
+        if settings.selected_strategy == strategy_id:
+            return
+        settings.selected_strategy = strategy_id
+        save_settings(settings)
+        self._refresh_list()
+        self._snack("Стратегия выбрана.")
+
+    def _choose_and_start(self, strategy_id: str) -> None:
+        if self._tests_running or not tr.is_tested(strategy_id):
+            return
+        settings = get_settings()
+        if settings.selected_strategy == strategy_id:
+            return
+        settings.selected_strategy = strategy_id
+        save_settings(settings)
+        self._refresh_list()
+
+        def work() -> None:
+            status = get_effective_runtime_status()
+            if status.running:
+                stopped, message = daemon_stop()
+                if not stopped:
+                    result = (False, message)
+                else:
+                    result = daemon_start()
+            else:
+                result = daemon_start()
+            self._ui(lambda: self._snack(result[1], error=not result[0]))
+
+        threading.Thread(
+            target=work,
+            daemon=True,
+            name="tigo-select-and-start",
+        ).start()
+
     def _start_tests(self, _: ft.ControlEvent) -> None:
         settings = get_settings()
         if not settings.active_version or not self._selected:
             return
-        for sid in self._selected:
-            self._expanded.add(sid)
-            self._apply_expand_state(sid)
+        self._seen_daemon_completed.clear()
+        self._session_completed.clear()
+        self._session_active = True
+        self._last_daemon_current = None
         self._update_buttons()
-        if self._strategy_list.page:
-            try:
-                self._strategy_list.update()
-            except RuntimeError:
-                pass
-        job = StrategyTestJob(
-            version=settings.active_version,
-            test_type=self._test_type,
-            strategy_ids=sorted(self._selected),
-        )
 
-        def on_done(ok: bool, msg: str) -> None:
+        def work() -> None:
+            ok, msg = daemon_test_start(
+                settings.active_version or "",
+                self._test_type,
+                sorted(self._selected),
+            )
+
             def finish() -> None:
+                self._tests_running = ok
+                if not ok:
+                    self._session_active = False
                 self._update_buttons()
                 if self._status_text:
                     self._status_text.value = msg if ok else f"Ошибка: {msg}"
-                    self._status_text.color = T.STATUS_ERROR if not ok else T.TEXT_MUTED
-                self._refresh_list()
+                    self._status_text.color = T.TEXT_MUTED if ok else T.STATUS_ERROR
+                if not ok:
+                    self._snack(msg, error=True)
+                else:
+                    self.page.update()
 
             self._ui(finish)
 
-        ok, msg = self._runner.start(job, on_done=on_done)
-        if ok:
-            self._update_buttons()
-            if self._status_text:
-                self._status_text.value = msg
-            self.page.update()
-        else:
-            self._snack(msg, error=True)
+        threading.Thread(target=work, daemon=True, name="tigo-test-start").start()
 
     def _stop_tests(self, _: ft.ControlEvent) -> None:
-        self._runner.stop()
-        self._update_buttons()
-        if self._status_text:
-            self._status_text.value = "Тесты остановлены."
-        self.page.update()
+        def work() -> None:
+            ok, msg = daemon_test_stop()
+
+            def finish() -> None:
+                if self._status_text:
+                    self._status_text.value = msg
+                    self._status_text.color = T.TEXT_MUTED if ok else T.STATUS_ERROR
+                if not ok:
+                    self._snack(msg, error=True)
+                else:
+                    self.page.update()
+
+            self._ui(finish)
+
+        threading.Thread(target=work, daemon=True, name="tigo-test-stop").start()
+
+    async def _poll_test_state(self) -> None:
+        while self._polling:
+            state = await asyncio.to_thread(daemon_test_status)
+            if state.get("ok"):
+                running = bool(state.get("running"))
+                phase = str(state.get("phase") or ("testing" if running else "idle"))
+                if phase not in {"idle", "testing", "pause"}:
+                    phase = "testing" if running else "idle"
+                current_raw = state.get("current_strategy_id")
+                current = str(current_raw) if current_raw else None
+                running_changed = self._tests_running != running
+                layout_changed = (
+                    current != self._focused_strategy_id
+                    or phase != self._test_phase
+                    or running_changed
+                )
+                self._tests_running = running
+                if running:
+                    self._session_active = True
+                completed_raw = state.get("completed_strategy_ids")
+                completed = (
+                    {str(value) for value in completed_raw if isinstance(value, str)}
+                    if isinstance(completed_raw, list)
+                    else set()
+                )
+                newly_completed = completed - self._seen_daemon_completed
+                for strategy_id in newly_completed:
+                    tr.reload_strategy(strategy_id)
+                self._seen_daemon_completed.update(completed)
+                self._session_completed.update(completed)
+                layout_changed = layout_changed or bool(newly_completed)
+
+                version_raw = state.get("version")
+                version = str(version_raw) if version_raw else None
+                probe = state.get("probe")
+                if isinstance(probe, dict):
+                    probe_sid = probe.get("strategy_id")
+                    probe_rows = probe.get("rows")
+                    if isinstance(probe_sid, str) and isinstance(probe_rows, list):
+                        tr.apply_remote_probe_snapshot(
+                            probe_sid,
+                            probe_rows,
+                            version=version,
+                        )
+
+                remote_current = current if phase == "testing" else None
+                if remote_current != self._last_daemon_current:
+                    tr.set_remote_current(remote_current, version=version)
+                    self._last_daemon_current = remote_current
+
+                self._focused_strategy_id = current
+                self._test_phase = phase
+                desired_expanded = test_expanded_state(
+                    running=running,
+                    current_strategy_id=current,
+                    session_active=self._session_active,
+                    completed_strategy_ids=self._session_completed,
+                    current_expanded=self._expanded,
+                )
+                if not running and self._session_active:
+                    self._session_active = False
+                if desired_expanded != self._expanded:
+                    self._expanded = desired_expanded
+                    layout_changed = True
+
+                message = str(state.get("message") or "")
+                success = bool(state.get("success", True))
+                message_changed = (
+                    message != self._last_daemon_message or success != self._last_daemon_success
+                )
+                if running_changed:
+                    self._update_buttons()
+                if self._status_text:
+                    if message and message_changed:
+                        self._status_text.value = message
+                        self._status_text.color = (
+                            T.TEXT_MUTED if success else T.STATUS_ERROR
+                        )
+                self._last_daemon_message = message
+                self._last_daemon_success = success
+                if layout_changed:
+                    self._refresh_list()
+                elif (running_changed or message_changed) and self._start_btn and self._start_btn.page:
+                    try:
+                        self.page.update()
+                    except RuntimeError:
+                        pass
+            await asyncio.sleep(0.5)

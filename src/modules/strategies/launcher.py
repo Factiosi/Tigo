@@ -15,6 +15,7 @@ from src.core.paths import (
 )
 from src.core.settings import get_settings
 from src.kernel.launch_spec import WinwsLaunchSpec, tokenize_winws_args
+from src.kernel.process_probe import find_foreign_winws_processes
 from src.modules.filters.game_filter import get_game_filter_ports, sync_game_filter_from_disk
 from src.modules.filters.tcp import enable_tcp_timestamps
 from src.modules.strategies.models import Strategy
@@ -35,8 +36,18 @@ def ensure_runtime_preflight(*, version: str) -> tuple[bool, str]:
     winws = bin_dir() / "winws.exe"
     if not winws.exists():
         return False, f"winws.exe не найден: {winws}. Установите или обновите flowseal."
+    if not any(bin_dir().glob("WinDivert*.dll")):
+        return False, "Библиотека WinDivert.dll не найдена в bin/. Обновите flowseal."
     if not any(bin_dir().glob("*.sys")):
         return False, "WinDivert64.sys не найден в bin/."
+    foreign = find_foreign_winws_processes()
+    if foreign:
+        pid, path = foreign[0]
+        return (
+            False,
+            f"Обнаружен другой winws.exe (PID {pid}): {path}. "
+            "Остановите другую программу обхода и повторите запуск.",
+        )
     sync_game_filter_from_disk(version)
     if not enable_tcp_timestamps():
         return False, "Не удалось включить TCP timestamps."
@@ -91,8 +102,14 @@ def build_custom_launch(args_text: str) -> tuple[WinwsLaunchSpec | None, str | N
     winws = bin_dir() / "winws.exe"
     if not winws.exists():
         return None, f"winws.exe не найден: {winws}."
+    if not any(bin_dir().glob("WinDivert*.dll")):
+        return None, "Библиотека WinDivert.dll не найдена в bin/."
     if not any(bin_dir().glob("*.sys")):
         return None, "WinDivert64.sys не найден в bin/."
+    foreign = find_foreign_winws_processes()
+    if foreign:
+        pid, path = foreign[0]
+        return None, f"Другой winws.exe уже запущен (PID {pid}): {path}."
     if not enable_tcp_timestamps():
         return None, "Не удалось включить TCP timestamps."
 

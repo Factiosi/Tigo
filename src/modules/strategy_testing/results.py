@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 from src.core.settings import get_settings
 from src.modules.strategy_testing import cache as results_cache
@@ -186,7 +186,34 @@ def load_cache() -> None:
     _cache_loaded = True
 
 
+def reload_strategy(strategy_id: str, *, version: str | None = None) -> bool:
+    """Reload one daemon-written result without rebuilding the whole GUI list."""
+    ver = _resolve_version(version)
+    entry = results_cache.load_strategy_result(ver, strategy_id)
+    if entry is None:
+        return False
+    _hydrate_entry(ver, strategy_id, entry)
+    _notify(strategy_id=strategy_id, event="status")
+    return True
+
+
+def set_remote_current(strategy_id: str | None, *, version: str | None = None) -> None:
+    """Mirror the daemon test cursor in the GUI process."""
+    global _current
+    ver = _resolve_version(version)
+    next_value = (ver, strategy_id) if strategy_id else None
+    if _current == next_value:
+        return
+    previous = _current[1] if _current else None
+    _current = next_value
+    if strategy_id and _key(ver, strategy_id) not in _probe_tables:
+        init_probe_table(strategy_id, version=ver)
+    for sid in {value for value in (previous, strategy_id) if value}:
+        _notify(strategy_id=sid, event="status")
+
+
 def get_probe_table(strategy_id: str, *, version: str | None = None) -> list[ProbeTableRow]:
+    load_cache()
     ver = _resolve_version(version)
     cache_key = _key(ver, strategy_id)
     if cache_key in _probe_tables:
@@ -195,6 +222,58 @@ def get_probe_table(strategy_id: str, *, version: str | None = None) -> list[Pro
     if item and item.rows:
         return [_result_to_table_row(row) for row in item.rows]
     return []
+
+
+def probe_snapshot(strategy_id: str, *, version: str | None = None) -> list[dict[str, Any]]:
+    def cell_payload(cell: ProbeCell | None) -> dict[str, str] | None:
+        if cell is None:
+            return None
+        return {"phase": cell.phase, "text": cell.text}
+
+    return [
+        {
+            "name": row.name,
+            "http": cell_payload(row.http),
+            "tls12": cell_payload(row.tls12),
+            "tls13": cell_payload(row.tls13),
+            "ping": cell_payload(row.ping),
+        }
+        for row in get_probe_table(strategy_id, version=version)
+    ]
+
+
+def apply_remote_probe_snapshot(
+    strategy_id: str,
+    rows: list[dict[str, Any]],
+    *,
+    version: str | None = None,
+) -> None:
+    def parse_cell(raw: object, *, required: bool = False) -> ProbeCell | None:
+        if not isinstance(raw, dict):
+            return ProbeCell() if required else None
+        phase = str(raw.get("phase") or "pending")
+        if phase not in {"pending", "loading", "done"}:
+            phase = "pending"
+        return ProbeCell(phase=phase, text=str(raw.get("text") or "?"))  # type: ignore[arg-type]
+
+    parsed: list[ProbeTableRow] = []
+    for raw in rows:
+        if not isinstance(raw, dict) or not raw.get("name"):
+            continue
+        parsed.append(
+            ProbeTableRow(
+                name=str(raw["name"]),
+                http=parse_cell(raw.get("http")),
+                tls12=parse_cell(raw.get("tls12")),
+                tls13=parse_cell(raw.get("tls13")),
+                ping=parse_cell(raw.get("ping"), required=True) or ProbeCell(),
+            )
+        )
+    if not parsed:
+        return
+    ver = _resolve_version(version)
+    _probe_tables[_key(ver, strategy_id)] = parsed
+    _notify(strategy_id=strategy_id, event="probe")
 
 
 def init_probe_table(strategy_id: str, *, version: str | None = None) -> None:
@@ -247,6 +326,7 @@ def apply_probe_result(
 
 
 def get_result(strategy_id: str, *, version: str | None = None) -> StrategyTestResult | None:
+    load_cache()
     ver = _resolve_version(version)
     item = _results.get(_key(ver, strategy_id))
     if item is None or item.state == "untested":

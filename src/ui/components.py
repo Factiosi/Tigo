@@ -427,9 +427,17 @@ def _wrap_click(handler):
 
     def wrapped(e: ft.ControlEvent) -> None:
         _close_active_select(refresh=False)
+        page = None
+        try:
+            page = e.page
+        except RuntimeError:
+            pass
         handler(e)
-        if e.page:
-            e.page.update()
+        if page is not None:
+            try:
+                page.update()
+            except RuntimeError:
+                pass
 
     return wrapped
 
@@ -684,9 +692,9 @@ def make_select(
         value_text.value = text
         value_text.color = T.TEXT
         close_menu(refresh=False)
+        page.update()
         if on_change:
             on_change(key)
-        page.update()
 
     def on_field_size(e: ft.LayoutSizeChangeEvent) -> None:
         if e.width > 0:

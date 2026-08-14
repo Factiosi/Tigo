@@ -105,7 +105,7 @@ def start_custom_strategy(args_text: str | None = None) -> tuple[bool, str]:
     return ok, message
 
 
-def restart_if_running() -> tuple[bool, str]:
+def restart_if_running(*, strategy_id: str | None = None) -> tuple[bool, str]:
     """Stop and restart the active strategy if winws is currently running."""
     try:
         from src.daemon.ipc import daemon_start, daemon_stop, is_daemon_running
@@ -117,7 +117,9 @@ def restart_if_running() -> tuple[bool, str]:
             ok, msg = daemon_stop()
             if not ok:
                 return False, msg
-            return daemon_start()
+            settings = get_settings()
+            launch_id = strategy_id or settings.selected_strategy
+            return daemon_start(launch_id)
     except ImportError:
         pass
 
@@ -130,10 +132,11 @@ def restart_if_running() -> tuple[bool, str]:
     if settings.strategy_source == "custom":
         return start_custom_strategy(settings.custom_strategy_args)
 
-    if not settings.selected_strategy:
+    launch_id = strategy_id or settings.selected_strategy
+    if not launch_id:
         return False, "Стратегия не выбрана."
 
     for strategy in list_strategies():
-        if strategy.id == settings.selected_strategy:
+        if strategy.id == launch_id:
             return start_strategy(strategy)
     return False, "Выбранная стратегия не найдена."

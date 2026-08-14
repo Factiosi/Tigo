@@ -10,7 +10,7 @@ from src.modules.strategy_testing import cache
 from src.modules.strategy_testing import results as tr
 from src.modules.strategy_testing.probe import load_targets
 from src.modules.strategy_testing.runner import INTER_STRATEGY_PAUSE_SECONDS
-from src.ui.pages.strategies import test_expanded_state
+from src.ui.pages.strategies import compute_expanded_state
 
 
 class ProbeTargetTests(unittest.TestCase):
@@ -99,13 +99,41 @@ class LiveProbeTests(unittest.TestCase):
         self.assertEqual(table[1].http.phase, "loading")
 
 
+class ProbeTableViewTests(unittest.TestCase):
+    def test_loading_spinner_is_reused_between_syncs(self) -> None:
+        from src.ui.probe_table import ProbeTableView
+
+        version = "test-probe-view"
+        strategy_id = "flowseal:spinner"
+        with patch("src.modules.strategy_testing.results._resolve_version", return_value=version):
+            tr.init_probe_table(strategy_id, version=version)
+            tr.set_probe_loading(strategy_id, version=version)
+
+            view = ProbeTableView(strategy_id)
+            loading_key = ("YouTubeWeb", "http")
+            spinner = view._spinners[loading_key]
+            view.sync(strategy_id)
+            self.assertIs(view._spinners[loading_key], spinner)
+
+            snapshot = tr.probe_snapshot(strategy_id, version=version)
+            for row in snapshot:
+                if row["name"] == "YouTubeWeb":
+                    row["http"] = {"phase": "done", "text": "HTTP:OK"}
+                    break
+            tr.apply_remote_probe_snapshot(strategy_id, snapshot, version=version)
+            view.sync(strategy_id)
+            self.assertNotIn(loading_key, view._spinners)
+            self.assertIn(("YouTubeWeb", "ping"), view._spinners)
+
+
 class TestUiStateTests(unittest.TestCase):
     def test_mass_run_focuses_only_current_strategy(self) -> None:
         self.assertEqual(
-            test_expanded_state(
+            compute_expanded_state(
                 running=True,
                 current_strategy_id="two",
                 session_active=True,
+                planned_strategy_ids={"one", "two"},
                 completed_strategy_ids={"one"},
                 current_expanded={"one"},
             ),
@@ -114,12 +142,26 @@ class TestUiStateTests(unittest.TestCase):
 
     def test_finished_run_expands_all_completed_strategies(self) -> None:
         self.assertEqual(
-            test_expanded_state(
+            compute_expanded_state(
                 running=False,
                 current_strategy_id=None,
                 session_active=True,
+                planned_strategy_ids={"one", "two"},
                 completed_strategy_ids={"one", "two"},
                 current_expanded={"two"},
+            ),
+            {"one", "two"},
+        )
+
+    def test_finished_run_expands_only_planned_completed_strategies(self) -> None:
+        self.assertEqual(
+            compute_expanded_state(
+                running=False,
+                current_strategy_id=None,
+                session_active=True,
+                planned_strategy_ids={"one", "two"},
+                completed_strategy_ids={"one", "two", "three"},
+                current_expanded=set(),
             ),
             {"one", "two"},
         )
@@ -129,10 +171,11 @@ class TestUiStateTests(unittest.TestCase):
 
     def test_pause_keeps_completed_strategy_expanded(self) -> None:
         self.assertEqual(
-            test_expanded_state(
+            compute_expanded_state(
                 running=True,
                 current_strategy_id="one",
                 session_active=True,
+                planned_strategy_ids={"one", "two"},
                 completed_strategy_ids={"one"},
                 current_expanded={"one"},
             ),

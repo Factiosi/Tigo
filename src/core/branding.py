@@ -6,7 +6,17 @@ from pathlib import Path
 
 from PIL import Image
 
+from src.core.material_icons import render_material_icon
 from src.core.paths import program_root
+from src.core.settings import get_settings
+from src.theme import build_theme_tokens
+
+_TRAY_MENU_SPECS: dict[str, tuple[str, str]] = {
+    "start": ("PLAY_ARROW_OUTLINED", "STATUS_ACTIVE"),
+    "stop": ("STOP", "STATUS_ERROR"),
+    "open": ("OPEN_IN_NEW_OUTLINED", "ACCENT"),
+    "quit": ("LOGOUT", "TEXT_MUTED"),
+}
 
 
 def icons_dir() -> Path:
@@ -28,24 +38,24 @@ def tray_icon_path(*, running: bool) -> Path:
     return fallback if fallback.exists() else path
 
 
-def tray_menu_icon_path(name: str) -> Path:
-    return icons_dir() / "menu" / f"{name}.png"
+def load_tray_menu_icon(name: str, *, size: int = 16) -> Image.Image | None:
+    spec = _TRAY_MENU_SPECS.get(name)
+    if spec is None:
+        return None
+    icon_name, token_name = spec
+    settings = get_settings()
+    tokens = build_theme_tokens(settings.theme_mode, settings.portal_hue)
+    color = getattr(tokens, token_name, tokens.ACCENT)
+    try:
+        return render_material_icon(icon_name, size=size, color=color)
+    except (FileNotFoundError, KeyError, OSError, ValueError):
+        return None
 
 
 def load_tray_icon(*, running: bool, size: int = 64) -> Image.Image:
     path = tray_icon_path(running=running)
     if not path.exists():
         return _fallback_tray_icon(size)
-    image = Image.open(path).convert("RGBA")
-    if image.size != (size, size):
-        image = image.resize((size, size), Image.Resampling.LANCZOS)
-    return image
-
-
-def load_tray_menu_icon(name: str, *, size: int = 16) -> Image.Image | None:
-    path = tray_menu_icon_path(name)
-    if not path.exists():
-        return None
     image = Image.open(path).convert("RGBA")
     if image.size != (size, size):
         image = image.resize((size, size), Image.Resampling.LANCZOS)
@@ -67,5 +77,4 @@ __all__ = [
     "load_tray_icon",
     "load_tray_menu_icon",
     "tray_icon_path",
-    "tray_menu_icon_path",
 ]

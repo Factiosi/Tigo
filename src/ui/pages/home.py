@@ -147,9 +147,7 @@ class HomePage:
                 self._selected_strategy_id if has_strategies else "",
                 on_change=self._on_strategy_change if has_strategies else None,
                 disabled=not has_strategies,
-                option_trailing=lambda strategy_id: strategy_status_pill(
-                    strategy_id, compact=True
-                )
+                option_trailing=lambda strategy_id: strategy_status_pill(strategy_id)
                 if strategy_id
                 else None,
             )

@@ -254,7 +254,7 @@ def ui_text(
     )
 
 
-def status_pill(status: str, label: str | None = None) -> ft.Container:
+def status_pill(status: str, label: str | None = None, *, dense: bool = False) -> ft.Container:
     colors = {
         "active": (T.STATUS_ACTIVE, T.STATUS_ACTIVE_BG, "Активно"),
         "connecting": (T.STATUS_CONNECTING, T.STATUS_CONNECTING_BG, "Подключение"),
@@ -263,17 +263,24 @@ def status_pill(status: str, label: str | None = None) -> ft.Container:
         "offline": (T.STATUS_OFFLINE, T.STATUS_OFFLINE_BG, "Отключено"),
     }
     fg, bg, default = colors.get(status, colors["offline"])
+    dot_size = 5 if dense else 6
+    text_size = 11 if dense else 12
+    padding = (
+        ft.Padding.symmetric(horizontal=8, vertical=2)
+        if dense
+        else ft.Padding.symmetric(horizontal=12, vertical=6)
+    )
     return ft.Container(
         content=ft.Row(
             [
-                ft.Container(width=6, height=6, bgcolor=fg, border_radius=99),
-                ui_text(label or default, size=12, color=fg, weight=ft.FontWeight.W_500),
+                ft.Container(width=dot_size, height=dot_size, bgcolor=fg, border_radius=99),
+                ui_text(label or default, size=text_size, color=fg, weight=ft.FontWeight.W_500),
             ],
-            spacing=6,
+            spacing=4 if dense else 6,
             tight=True,
         ),
         bgcolor=bg,
-        padding=ft.Padding.symmetric(horizontal=12, vertical=6),
+        padding=padding,
         border_radius=99,
     )
 
@@ -565,8 +572,38 @@ def make_select(
         width = _resolve_field_width()
         inner = max(0.0, width - 2 * MENU_EDGE_INSET)
         menu_col.width = inner
+        content_width = max(0.0, inner - 24)
         for ctrl in menu_col.controls:
             ctrl.width = inner
+            content = ctrl.content
+            if isinstance(content, ft.Container):
+                content.width = content_width
+
+    def _menu_item_content(text: str, trailing_controls: list[ft.Control], *, active: bool) -> ft.Container:
+        row_controls: list[ft.Control] = [
+            ft.Text(
+                text,
+                no_wrap=True,
+                expand=True,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                size=T.FONT_BODY,
+                color=T.MENU_SELECTED if active else T.TEXT,
+                weight=ft.FontWeight.W_600 if active else ft.FontWeight.W_400,
+            ),
+        ]
+        if trailing_controls:
+            row_controls.append(
+                ft.Row(trailing_controls, spacing=4, tight=True)
+            )
+        return ft.Container(
+            content=ft.Row(
+                row_controls,
+                spacing=8,
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            expand=True,
+        )
 
     def rebuild_menu() -> None:
         menu_col.controls.clear()
@@ -577,16 +614,13 @@ def make_select(
                 extra = option_trailing(key)
                 if extra is not None:
                     trailing_controls.append(extra)
-            if active:
+            elif active:
                 trailing_controls.append(
                     ft.Icon(ft.Icons.CHECK, size=16, color=T.ACCENT)
                 )
             item = ft.MenuItemButton(
-                content=ft.Text(text, no_wrap=True),
+                content=_menu_item_content(text, trailing_controls, active=active),
                 height=MENU_ITEM_HEIGHT,
-                trailing=ft.Row(trailing_controls, spacing=4, tight=True)
-                if trailing_controls
-                else None,
                 style=_select_menu_item_style(selected=active),
                 on_click=lambda _e, k=key, t=text: choose(k, t),
             )

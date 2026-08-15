@@ -45,7 +45,7 @@ def transform_runtime(source_root: Path) -> None:
     if src_utils.exists():
         dest_utils = utils_dir()
         if dest_utils.exists():
-            _merge_copytree(src_utils, dest_utils)
+            _merge_copytree(src_utils, dest_utils, skip_names=frozenset({"game_filter.enabled"}))
         else:
             shutil.copytree(src_utils, dest_utils)
 

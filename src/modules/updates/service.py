@@ -11,7 +11,7 @@ from src.core.debug_log import debug, info as log_info
 from src.core.paths import runtime_installed, runtime_version_path, staging_dir
 from src.core.settings import get_settings, save_settings
 from src.kernel.public import get_effective_runtime_status
-from src.modules.filters.game_filter import sync_game_filter_from_disk
+from src.modules.filters.game_filter import ensure_game_filter_synced
 from src.modules.filters.ipset_filter import sync_ipset_from_disk
 from src.modules.strategies.repository import (
     apply_version_retention,
@@ -129,7 +129,7 @@ def check_and_apply(*, restart_running: bool = True) -> ApplyResult:
         previous = settings.active_version
         set_active_version(tag)
         apply_version_retention()
-        sync_game_filter_from_disk(tag)
+        ensure_game_filter_synced(tag)
         sync_ipset_from_disk(tag)
         version_changed = previous != tag
         if was_running:

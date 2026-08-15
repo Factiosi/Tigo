@@ -294,13 +294,15 @@ def runtime_installed() -> bool:
     return (bin_dir() / "winws.exe").exists()
 
 
-def _merge_copytree(src: Path, dest: Path) -> None:
+def _merge_copytree(src: Path, dest: Path, *, skip_names: frozenset[str] | None = None) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     for item in src.iterdir():
+        if skip_names and item.name in skip_names:
+            continue
         target = dest / item.name
         if item.is_dir():
             if target.exists():
-                _merge_copytree(item, target)
+                _merge_copytree(item, target, skip_names=skip_names)
             else:
                 shutil.copytree(item, target)
         else:
@@ -327,8 +329,9 @@ def _copy_runtime_tree(source_root: Path) -> None:
     src_utils = source_root / "utils"
     if src_utils.exists():
         dest_utils = utils_dir()
+        skip = frozenset({"game_filter.enabled"})
         if dest_utils.exists():
-            _merge_copytree(src_utils, dest_utils)
+            _merge_copytree(src_utils, dest_utils, skip_names=skip)
         else:
             shutil.copytree(src_utils, dest_utils)
 

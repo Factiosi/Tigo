@@ -125,13 +125,13 @@ def verify_frozen_layout() -> None:
         root / "flet" / "flet.exe"
     ).exists():
         missing.append("flet_client\\flet.exe")
-    if not (root / "logos" / "online" / "tigo.ico").exists():
-        missing.append("logos\\")
+    if not (root / "icons" / "app.ico").exists():
+        missing.append("icons\\")
     if not missing:
         return
     text = (
         "Неполная установка Tigo.\n\n"
-        "Рядом с Tigo.exe должны лежать папки flet_client\\ и logos\\ "
+        "Рядом с Tigo.exe должны лежать папки flet_client\\ и icons\\ "
         "(вся папка dist\\Tigo\\, а не один exe-файл).\n\n"
         f"Не найдено: {', '.join(missing)}"
     )

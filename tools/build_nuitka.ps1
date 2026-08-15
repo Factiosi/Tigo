@@ -16,12 +16,12 @@ if (Test-Path $VersionFile) {
     }
 }
 
-$icon = Join-Path $Repo "logos\online\tigo.ico"
+$icon = Join-Path $Repo "icons\app.ico"
 if (-not (Test-Path $icon)) {
-    Write-Host "Generating logo assets..."
+    Write-Host "Generating icon assets..."
     Push-Location (Join-Path $Repo "tools")
     npm install --silent 2>$null
-    node generate_logos.mjs
+    node generate_icons.mjs
     Pop-Location
 }
 
@@ -48,7 +48,7 @@ $buildArgs = @(
     "--product-name=Tigo",
     "--file-version=$Version",
     "--company-name=Tigo",
-    "--include-data-dir=$(Join-Path $Repo 'logos')=logos",
+    "--include-data-dir=$(Join-Path $Repo 'icons')=icons",
     "--include-package=src",
     "--include-package=flet",
     "--include-package-data=flet",

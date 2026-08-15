@@ -25,9 +25,9 @@ Desktop.ini
 .DS_Store
 *.log
 
-# logo build intermediates
-logos/**/_ico-*.png
-logos/**/_test_*.png
+# icon build intermediates
+icons/**/_ico-*.png
+icons/**/_test_*.png
 
 # Nuitka diagnostics/cache
 *.nuitka-*

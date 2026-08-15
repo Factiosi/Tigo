@@ -2,7 +2,7 @@
 ; Build dist\Tigo first, then compile this file with ISCC.exe.
 
 #define MyAppName "Tigo"
-#define MyAppVersion "1.1.2"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Tigo"
 #define MyAppExeName "Tigo.exe"
 #define MyAppId "{{CB93C415-8593-4898-99D8-D1B69E7C8C38}"
@@ -53,7 +53,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall; Check: ShouldLaunchTigo
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall shellexec runascurrentuser; Check: ShouldLaunchTigo
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Tigo Autostart"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveTigoAutostart"

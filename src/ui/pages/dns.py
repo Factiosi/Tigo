@@ -21,6 +21,7 @@ from src.modules.dns.service import (
 )
 from src.theme import T
 from src.ui.components import block_section, make_select, pill_button, scroll_page, set_pill_disabled, ui_text
+from src.ui.notifications import show_toast
 
 AUTO_DNS_KEY = "__auto__"
 CUSTOM_DNS_KEY = "__custom__"
@@ -208,12 +209,7 @@ class DnsPage:
                 if ok and on_success:
                     on_success()
                 self._update_apply_button()
-                self.page.snack_bar = ft.SnackBar(
-                    ft.Text(msg),
-                    bgcolor=T.STATUS_ERROR if not ok else T.ELEVATED,
-                )
-                self.page.snack_bar.open = True
-                self.page.update()
+                show_toast(self.page, msg, kind="error" if not ok else "success")
 
             try:
                 self.page.run_thread(finish)

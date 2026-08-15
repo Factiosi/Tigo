@@ -33,6 +33,7 @@ from src.ui.components import (
     set_pill_disabled,
     ui_text,
 )
+from src.ui.notifications import show_toast
 from src.ui.probe_table import ProbeTableView, factiosi_spinner
 from src.ui.strategy_status import strategy_actions_disabled, strategy_status_pill
 
@@ -439,9 +440,8 @@ class StrategiesPage:
                         label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
                     ),
                     ft.Radio(
-                        label="Проверка DPI — пока недоступна",
+                        label="Проверка DPI (TCP 16–20 freeze)",
                         value="dpi",
-                        disabled=True,
                         label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
                     ),
                 ],
@@ -546,12 +546,7 @@ class StrategiesPage:
         if self._status_text:
             self._status_text.value = message
             self._status_text.color = T.STATUS_ERROR if error else T.TEXT_MUTED
-        self.page.snack_bar = ft.SnackBar(
-            ft.Text(message),
-            bgcolor=T.STATUS_ERROR if error else T.ELEVATED,
-        )
-        self.page.snack_bar.open = True
-        self.page.update()
+        show_toast(self.page, message, kind="error" if error else "info")
 
     def _choose_strategy(self, strategy_id: str) -> None:
         if self._tests_running or not tr.is_tested(strategy_id):
@@ -563,7 +558,7 @@ class StrategiesPage:
         settings.selected_strategy = strategy_id
         save_settings(settings)
         self._refresh_strategy_action_buttons()
-        self._snack("Стратегия выбрана.")
+        self._snack("Стратегия применена но не запущена.")
 
     def _choose_and_start(self, strategy_id: str) -> None:
         if self._tests_running or not tr.is_tested(strategy_id):
@@ -574,20 +569,32 @@ class StrategiesPage:
             save_settings(settings)
             self._refresh_strategy_action_buttons()
 
-        def work() -> None:
+        def work() -> tuple[bool, str]:
             status = get_effective_runtime_status()
             if status.running:
                 stopped, message = daemon_stop()
                 if not stopped:
-                    result = (False, message)
+                    return False, message
+                return daemon_start(strategy_id)
+            return daemon_start(strategy_id)
+
+        def runner() -> None:
+            try:
+                result = work()
+            except Exception as exc:  # noqa: BLE001
+                result = (False, str(exc))
+
+            def finish() -> None:
+                ok, msg = result
+                if ok:
+                    self._snack("Стратегия применена и winws запущен.")
                 else:
-                    result = daemon_start(strategy_id)
-            else:
-                result = daemon_start(strategy_id)
-            self._ui(lambda: self._snack(result[1], error=not result[0]))
+                    self._snack(msg or "Не удалось запустить winws.", error=True)
+
+            self._ui(finish)
 
         threading.Thread(
-            target=work,
+            target=runner,
             daemon=True,
             name="tigo-select-and-start",
         ).start()

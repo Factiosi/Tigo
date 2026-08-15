@@ -43,7 +43,7 @@ def get_effective_runtime_status() -> RuntimeStatus:
                 local = runtime_state.get_status()
                 return RuntimeStatus(
                     phase=phase,
-                    running=remote.running,
+                    running=remote.running or phase == RuntimePhase.RUNNING,
                     strategy_name=remote.strategy_name or None,
                     pid=remote.pid,
                     windivert_sys_present=local.windivert_sys_present,

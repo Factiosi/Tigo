@@ -10,6 +10,7 @@ from src.modules.lists.editor import open_in_default_editor
 from src.modules.strategies.repository import bootstrap_user_lists
 from src.theme import T
 from src.ui.components import block_section, pill_button, scroll_page, ui_text
+from src.ui.notifications import show_toast
 
 
 class ListsPage:
@@ -49,12 +50,7 @@ class ListsPage:
     def _list_row(self, name: str, path) -> ft.Row:
         def on_open(_: ft.ControlEvent) -> None:
             ok, message = open_in_default_editor(path)
-            self.page.snack_bar = ft.SnackBar(
-                ft.Text(message),
-                bgcolor=T.STATUS_ERROR if not ok else T.ELEVATED,
-            )
-            self.page.snack_bar.open = True
-            self.page.update()
+            show_toast(self.page, message, kind="error" if not ok else "success")
 
         return ft.Row(
             [

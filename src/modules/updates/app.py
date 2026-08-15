@@ -16,6 +16,9 @@ from src.core.version import __version__
 
 MSG_APP_UP_TO_DATE = "У вас последняя актуальная версия Tigo"
 MSG_APP_UPDATE_AVAILABLE = "Доступна новая версия Tigo"
+MSG_APP_UPDATE_CLICKABLE = (
+    "Доступна новая версия Tigo (нажмите сюда чтобы скачать и установить)"
+)
 MSG_APP_DOWNLOADING = "Новая версия Tigo доступна и скачивается"
 _ASSET_RE = re.compile(r"^Tigo-Setup-(\d+\.\d+\.\d+)\.exe$", re.I)
 
@@ -130,7 +133,7 @@ def check_app_only() -> tuple[bool, str, str]:
         return False, f"Не удалось проверить обновления Tigo: {exc}", "error"
     if update is None:
         return True, MSG_APP_UP_TO_DATE, "success"
-    return True, f"{MSG_APP_UPDATE_AVAILABLE}: {update.version}", "warning"
+    return True, MSG_APP_UPDATE_CLICKABLE, "warning"
 
 
 def check_and_install_app() -> tuple[bool, str, str]:

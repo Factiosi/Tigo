@@ -82,9 +82,21 @@ def menu_item(text: str, action, *, icon: Image.Image | None = None, **kwargs) -
 class TigoTrayIcon(pystray._win32.Icon):
     """pystray Win32 icon that renders optional menu item bitmaps."""
 
-    def __init__(self, *args, **kwargs) -> None:
+    WM_LBUTTONDBLCLK = 0x0203
+
+    def __init__(self, *args, on_double_click=None, **kwargs) -> None:
+        kwargs.pop("default", None)
         super().__init__(*args, **kwargs)
         self._menu_bitmaps: list[wintypes.HBITMAP] = []
+        self._on_double_click = on_double_click
+
+    def _on_notify(self, wparam, lparam):
+        if lparam == self.WM_LBUTTONDBLCLK and self._on_double_click is not None:
+            self._on_double_click(self, None)
+            return
+        if lparam == win32.WM_LBUTTONUP:
+            return
+        super()._on_notify(wparam, lparam)
 
     def _release_menu_bitmaps(self) -> None:
         for hbmp in self._menu_bitmaps:

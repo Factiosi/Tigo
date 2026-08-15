@@ -90,7 +90,24 @@ def _pending_cell() -> ProbeCell:
     return ProbeCell("pending", "?")
 
 
-def default_probe_table() -> list[ProbeTableRow]:
+def default_probe_table(*, test_type: str = "standard") -> list[ProbeTableRow]:
+    if test_type == "dpi":
+        from src.modules.strategy_testing.dpi_probe import load_dpi_targets
+
+        rows: list[ProbeTableRow] = []
+        for target in load_dpi_targets():
+            name = f"{target.target_id} [{target.provider}]"
+            rows.append(
+                ProbeTableRow(
+                    name=name,
+                    http=_pending_cell(),
+                    tls12=_pending_cell(),
+                    tls13=_pending_cell(),
+                    ping=ProbeCell("done", "n/a"),
+                )
+            )
+        return rows
+
     rows: list[ProbeTableRow] = []
     for target in load_targets():
         if target.url:
@@ -276,17 +293,27 @@ def apply_remote_probe_snapshot(
     _notify(strategy_id=strategy_id, event="probe")
 
 
-def init_probe_table(strategy_id: str, *, version: str | None = None) -> None:
+def init_probe_table(
+    strategy_id: str,
+    *,
+    version: str | None = None,
+    test_type: str = "standard",
+) -> None:
     ver = _resolve_version(version)
-    _probe_tables[_key(ver, strategy_id)] = default_probe_table()
+    _probe_tables[_key(ver, strategy_id)] = default_probe_table(test_type=test_type)
 
 
-def set_probe_loading(strategy_id: str, *, version: str | None = None) -> None:
+def set_probe_loading(
+    strategy_id: str,
+    *,
+    version: str | None = None,
+    test_type: str = "standard",
+) -> None:
     ver = _resolve_version(version)
     cache_key = _key(ver, strategy_id)
     table = _probe_tables.get(cache_key)
     if not table:
-        init_probe_table(strategy_id, version=ver)
+        init_probe_table(strategy_id, version=ver, test_type=test_type)
         table = _probe_tables[cache_key]
     for row in table:
         if row.http:
@@ -295,7 +322,8 @@ def set_probe_loading(strategy_id: str, *, version: str | None = None) -> None:
             row.tls12.phase = "loading"
         if row.tls13:
             row.tls13.phase = "loading"
-        row.ping.phase = "loading"
+        if test_type != "dpi":
+            row.ping.phase = "loading"
     _notify(strategy_id=strategy_id, event="probe")
 
 
@@ -375,11 +403,16 @@ def clear_session(
     _notify(event="list")
 
 
-def set_running(strategy_id: str, *, version: str | None = None) -> None:
+def set_running(
+    strategy_id: str,
+    *,
+    version: str | None = None,
+    test_type: str = "standard",
+) -> None:
     global _current
     ver = _resolve_version(version)
     _current = (ver, strategy_id)
-    init_probe_table(strategy_id, version=ver)
+    init_probe_table(strategy_id, version=ver, test_type=test_type)
     _notify(strategy_id=strategy_id, event="status")
 
 

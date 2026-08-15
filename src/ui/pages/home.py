@@ -41,6 +41,7 @@ from src.ui.filter_labels import (
     game_filter_label,
     ipset_filter_label,
 )
+from src.ui.notifications import show_toast
 from src.ui.strategy_status import strategy_status_pill
 
 CUSTOM_HINT = (
@@ -187,11 +188,11 @@ class HomePage:
         status = self._resolve_status()
         starting = status.phase == RuntimePhase.STARTING
         stopping = status.phase == RuntimePhase.STOPPING
-        running = status.running or status.phase == RuntimePhase.RUNNING
+        running = self._status_running(status)
         settings = get_settings()
         no_flowseal = settings.strategy_source == "flowseal" and not has_flowseal_strategies()
         self._start_btn.disabled = self._busy or starting or stopping or running or no_flowseal
-        self._stop_btn.disabled = self._busy or stopping or not running
+        self._stop_btn.disabled = self._busy or stopping or (not running and not stopping)
 
     def on_mounted(self) -> None:
         runtime_state.subscribe(self._on_runtime_event)
@@ -229,7 +230,7 @@ class HomePage:
         self.page.run_task(poll)
 
     def _on_runtime_event(self) -> None:
-        self._update_action_buttons()
+        self._refresh_status(only_if_changed=True)
         try:
             self.page.update()
         except RuntimeError:
@@ -238,11 +239,26 @@ class HomePage:
     def _resolve_status(self):
         return get_effective_runtime_status()
 
+    def _invalidate_status_cache(self) -> None:
+        self._last_running = None
+        self._last_phase = None
+
+    def _schedule_status_resync(self, *, attempts: int = 6, interval: float = 0.5) -> None:
+        async def resync() -> None:
+            for _ in range(attempts):
+                self._refresh_status()
+                await asyncio.sleep(interval)
+
+        self.page.run_task(resync)
+
+    def _status_running(self, status) -> bool:
+        return status.running or status.phase == RuntimePhase.RUNNING
+
     def _refresh_status(self, *, only_if_changed: bool = False) -> None:
-        if self._busy:
+        if self._busy and only_if_changed:
             return
         status = self._resolve_status()
-        running = status.running
+        running = self._status_running(status)
         if (
             only_if_changed
             and self._last_running == running
@@ -255,7 +271,13 @@ class HomePage:
         if running:
             label = f"zapret запущен · {status.strategy_name}" if status.strategy_name else "zapret запущен"
             pill_key = "active"
-        elif status.phase.value == "failed":
+        elif status.phase == RuntimePhase.STARTING:
+            label = "запуск zapret…"
+            pill_key = "connecting"
+        elif status.phase == RuntimePhase.STOPPING:
+            label = "остановка zapret…"
+            pill_key = "connecting"
+        elif status.phase == RuntimePhase.FAILED:
             label = status.error or "ошибка запуска zapret"
             pill_key = "error"
         else:
@@ -270,15 +292,11 @@ class HomePage:
             log_error("ui", message)
         else:
             log_info("ui", message)
-        self.page.snack_bar = ft.SnackBar(
-            ft.Text(message),
-            bgcolor=T.STATUS_ERROR if error else T.ELEVATED,
-        )
-        self.page.snack_bar.open = True
-        self.page.update()
+        show_toast(self.page, message, kind="error" if error else "info")
 
     def _show_transition_status(self, label: str) -> None:
-        self._status_row.controls = [status_pill("offline", label)]
+        self._invalidate_status_cache()
+        self._status_row.controls = [status_pill("connecting", label)]
         self._update_action_buttons()
         self.page.update()
 
@@ -336,7 +354,9 @@ class HomePage:
             def done(result):
                 ok, msg = result
                 self._show_message(msg, error=not ok)
+                self._invalidate_status_cache()
                 self._refresh_status()
+                self._schedule_status_resync()
 
             debug("ui", "start custom strategy")
             self._run_bg(work, done)
@@ -363,7 +383,9 @@ class HomePage:
         def done(result):
             ok, msg = result
             self._show_message(msg, error=not ok)
+            self._invalidate_status_cache()
             self._refresh_status()
+            self._schedule_status_resync()
 
         self._run_bg(work, done)
 
@@ -386,7 +408,9 @@ class HomePage:
         def done(result):
             ok, msg = result
             self._show_message(msg, error=not ok)
+            self._invalidate_status_cache()
             self._refresh_status()
+            self._schedule_status_resync()
 
         self._run_bg(work, done)
 
@@ -413,7 +437,9 @@ class HomePage:
             def done(result):
                 ok, msg = result
                 self._show_message(msg or f"Перезапущено: {name}", error=not ok)
+                self._invalidate_status_cache()
                 self._refresh_status()
+                self._schedule_status_resync()
 
             self._run_bg(work, done)
 
@@ -425,9 +451,19 @@ class HomePage:
         apply_game_filter(settings.active_version, mode)  # type: ignore[arg-type]
         label = game_filter_label(mode)
         if get_effective_runtime_status().running:
-            ok, msg = restart_if_running()
-            self._show_message(msg or f"Game filter: {label}. Перезапущено.", error=not ok)
-            self._refresh_status()
+            self._show_transition_status("перезапуск zapret…")
+
+            def work():
+                return restart_if_running()
+
+            def done(result):
+                ok, msg = result
+                self._show_message(msg or f"Game filter: {label}. Перезапущено.", error=not ok)
+                self._invalidate_status_cache()
+                self._refresh_status()
+                self._schedule_status_resync()
+
+            self._run_bg(work, done)
         else:
             self._show_message(f"Game filter: {label}.")
 
@@ -438,12 +474,23 @@ class HomePage:
             return
         try:
             apply_ipset_mode(settings.active_version, mode)  # type: ignore[arg-type]
-            label = ipset_filter_label(mode)
-            if get_effective_runtime_status().running:
-                ok, msg = restart_if_running()
-                self._show_message(msg or f"IPset filter: {label}. Перезапущено.", error=not ok)
-                self._refresh_status()
-            else:
-                self._show_message(f"IPset filter: {label}.")
         except FileNotFoundError as exc:
             self._show_message(str(exc), error=True)
+            return
+        label = ipset_filter_label(mode)
+        if get_effective_runtime_status().running:
+            self._show_transition_status("перезапуск zapret…")
+
+            def work():
+                return restart_if_running()
+
+            def done(result):
+                ok, msg = result
+                self._show_message(msg or f"IPset filter: {label}. Перезапущено.", error=not ok)
+                self._invalidate_status_cache()
+                self._refresh_status()
+                self._schedule_status_resync()
+
+            self._run_bg(work, done)
+        else:
+            self._show_message(f"IPset filter: {label}.")

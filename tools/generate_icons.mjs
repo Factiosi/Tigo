@@ -40,3 +40,13 @@ async function writeIco(svgRel, icoRel) {
 await writePng("tray-active.svg", "tray-active.png", 64);
 await writePng("tray-idle.svg", "tray-idle.png", 64);
 await writeIco("app.svg", "app.ico");
+
+const menuIcons = [
+  ["menu/start.svg", "menu/start.png"],
+  ["menu/stop.svg", "menu/stop.png"],
+  ["menu/open.svg", "menu/open.png"],
+  ["menu/quit.svg", "menu/quit.png"],
+];
+for (const [svgRel, pngRel] of menuIcons) {
+  await writePng(svgRel, pngRel, 16);
+}

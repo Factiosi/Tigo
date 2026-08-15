@@ -39,16 +39,18 @@ _gdi32 = ctypes.windll.gdi32
 
 
 def pil_to_hbitmap(image: Image.Image) -> wintypes.HBITMAP:
-    """Convert a PIL image to an HBITMAP for menu item icons."""
-    rgba = image.convert("RGBA")
-    width, height = rgba.size
+    """Convert a PIL image to an HBITMAP for classic Win32 menu item icons."""
+    rgb = image.convert("RGB")
+    width, height = rgb.size
     bmi = _BITMAPINFO()
     bmi.bmiHeader.biSize = ctypes.sizeof(_BITMAPINFOHEADER)
     bmi.bmiHeader.biWidth = width
     bmi.bmiHeader.biHeight = -height
     bmi.bmiHeader.biPlanes = 1
-    bmi.bmiHeader.biBitCount = 32
+    bmi.bmiHeader.biBitCount = 24
     bmi.bmiHeader.biCompression = 0
+    row_bytes = ((width * 3 + 3) & ~3)
+    buffer_size = row_bytes * height
     bits = ctypes.c_void_p()
     hbmp = _gdi32.CreateDIBSection(
         None,
@@ -60,8 +62,12 @@ def pil_to_hbitmap(image: Image.Image) -> wintypes.HBITMAP:
     )
     if not hbmp:
         raise OSError("CreateDIBSection failed")
-    buffer = rgba.tobytes("raw", "BGRA")
-    ctypes.memmove(bits, buffer, len(buffer))
+    raw = rgb.tobytes("raw", "BGR")
+    padded = bytearray(buffer_size)
+    for row in range(height):
+        start = row * width * 3
+        padded[row * row_bytes : row * row_bytes + width * 3] = raw[start : start + width * 3]
+    ctypes.memmove(bits, bytes(padded), buffer_size)
     return hbmp
 
 

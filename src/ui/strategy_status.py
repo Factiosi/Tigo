@@ -47,5 +47,5 @@ def strategy_status_pill(strategy_id: str, *, compact: bool = False) -> ft.Contr
             "Неизвестно": "Неизвестно",
         }
         label = compact_labels.get(label, label)
-    return status_pill(key, label)
+    return status_pill(key, label, dense=compact)
 

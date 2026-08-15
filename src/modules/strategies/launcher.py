@@ -16,7 +16,7 @@ from src.core.paths import (
 from src.core.settings import get_settings
 from src.kernel.launch_spec import WinwsLaunchSpec, tokenize_winws_args
 from src.kernel.process_probe import find_foreign_winws_processes
-from src.modules.filters.game_filter import get_game_filter_ports, sync_game_filter_from_disk
+from src.modules.filters.game_filter import ensure_game_filter_synced, get_game_filter_ports
 from src.modules.filters.tcp import enable_tcp_timestamps
 from src.modules.strategies.models import Strategy
 from src.modules.strategies.parser import resolve_strategy_args
@@ -48,7 +48,7 @@ def ensure_runtime_preflight(*, version: str) -> tuple[bool, str]:
             f"Обнаружен другой winws.exe (PID {pid}): {path}. "
             "Остановите другую программу обхода и повторите запуск.",
         )
-    sync_game_filter_from_disk(version)
+    ensure_game_filter_synced(version)
     if not enable_tcp_timestamps():
         return False, "Не удалось включить TCP timestamps."
     debug("strategies", f"preflight ok for version {version}")

@@ -44,7 +44,7 @@ $SourceVersion = & $Py -c "from src.core.version import __version__; print(__ver
 Assert-True ($SourceVersion -eq $Version) "src/core/version.py is $SourceVersion, expected $Version."
 $IssText = Get-Content $InstallerScript -Raw
 Assert-True ($IssText -match "#define MyAppVersion `"$([regex]::Escape($Version))`"") "Inno version does not match $Version."
-$Changelog = Get-Content (Join-Path $Repo "docs\CHANGELOG.md") -Raw
+$Changelog = Get-Content (Join-Path $Repo "docs\CHANGELOG.md") -Raw -Encoding UTF8
 Assert-True ($Changelog -match "(?m)^## $([regex]::Escape($Version))\r?$") "CHANGELOG has no $Version section."
 
 $Branch = (git branch --show-current).Trim()
@@ -72,7 +72,7 @@ Invoke-Checked "powershell" @("-ExecutionPolicy", "Bypass", "-File", $BuildScrip
 $Required = @(
     (Join-Path $Standalone "Tigo.exe"),
     (Join-Path $Standalone "flet_client\flet.exe"),
-    (Join-Path $Standalone "logos\online\tigo.ico")
+    (Join-Path $Standalone "icons\app.ico")
 )
 foreach ($Path in $Required) {
     Assert-True (Test-Path $Path) "Required release file is missing: $Path"
@@ -121,7 +121,12 @@ $NotesMatch = [regex]::Match(
 )
 Assert-True $NotesMatch.Success "Could not extract release notes."
 $NotesFile = Join-Path $env:TEMP "tigo-release-$Version.md"
-$NotesMatch.Groups[1].Value.Trim() | Set-Content $NotesFile -Encoding utf8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText(
+    $NotesFile,
+    $NotesMatch.Groups[1].Value.Trim(),
+    $Utf8NoBom
+)
 try {
     Invoke-Checked "gh" @(
         "release", "create", $Tag,

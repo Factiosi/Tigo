@@ -105,7 +105,7 @@ def require_daemon_for_gui() -> None:
         text = (
             f"{text}\n\n"
             "Проверьте, что запускаете полную папку dist\\Tigo\\ "
-            "(Tigo.exe + flet_client\\ + logos\\)."
+            "(Tigo.exe + flet_client\\ + icons\\)."
         )
     try:
         import ctypes

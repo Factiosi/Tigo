@@ -11,7 +11,7 @@ TOOLS = ROOT / "tools"
 
 
 def main() -> None:
-    script = TOOLS / "generate_logos.mjs"
+    script = TOOLS / "generate_icons.mjs"
     if not script.exists():
         raise SystemExit(f"Missing {script}")
 
@@ -31,7 +31,7 @@ def main() -> None:
         shell=True,
     )
     if result.returncode != 0:
-        raise SystemExit("Logo generation failed")
+        raise SystemExit("Icon generation failed")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@
 - Windows 10/11 x64
 - Python 3.12 + venv
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) — workload **Desktop development with C++**
-- Node.js 20+ (для `tools/generate_logos.mjs`, если нет готовых `tigo.ico` / `tigo-tray.png`)
+- Node.js 20+ (для `tools/generate_icons.mjs`, если нет готовых `app.ico` / `tray-*.png`)
 - Один раз запустить `python run.py`, чтобы Flet скачал desktop client в `%USERPROFILE%\.flet\client\`
 
 ## Установка зависимостей
@@ -20,7 +20,7 @@ python -m venv .venv
 ```powershell
 cd tools
 npm install
-node generate_logos.mjs
+node generate_icons.mjs
 cd ..
 ```
 
@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_nuitka.ps1
 
 Скрипт пересоздаёт `dist\Tigo\` и после успешной сборки удаляет промежуточный `dist\run.build\`.
 
-Результат: **вся папка** `dist\Tigo\` — `Tigo.exe`, `flet_client\`, `logos\`, DLL и прочие зависимости Nuitka. Локальные `bin\` и `utils\` намеренно не копируются.
+Результат: **вся папка** `dist\Tigo\` — `Tigo.exe`, `flet_client\`, `icons\`, DLL и прочие зависимости Nuitka. Локальные `bin\` и `utils\` намеренно не копируются.
 
 > **Важно:** распространяйте или копируйте **целиком папку** `dist\Tigo\`, а не один `Tigo.exe`. Без `flet_client\` и соседних DLL приложение не запустится.
 

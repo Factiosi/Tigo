@@ -39,7 +39,7 @@ from src.ui.components import (
     ui_text,
     _pill_style,
 )
-from src.ui.notifications import show_toast
+from src.ui.notifications import present_app_update_result, show_toast
 from src.ui.probe_table import factiosi_spinner
 from src.ui.windows.debug_console import open_debug_console
 
@@ -433,16 +433,22 @@ class SettingsPage:
 
         def done(result):
             ok, msg, kind = result
-            show_toast(self.page, msg, kind=kind if ok else "error")
+            present_app_update_result(self.page, ok, msg, kind)
 
         self._run_updates_bg(work, done, active="tigo:check")
 
     def _check_and_install_app_updates(self, _: ft.ControlEvent) -> None:
+        from src.ui.update_overlay import hide_update_install_overlay, show_update_install_overlay
+
+        show_update_install_overlay(self.page)
+
         def work():
             return check_and_install_app()
 
         def done(result):
             ok, msg, kind = result
+            if not (ok and kind == "success"):
+                hide_update_install_overlay(self.page)
             show_toast(self.page, msg, kind=kind if ok else "error")
 
         self._run_updates_bg(work, done, active="tigo:install")

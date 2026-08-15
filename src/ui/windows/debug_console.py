@@ -9,6 +9,7 @@ from src.core.debug_log import info
 from src.core.paths import packaged_app_executable, program_root
 
 _process: subprocess.Popen[bytes] | None = None
+_CONSOLE_TITLE_MARKER = "консоль отладки"
 
 
 def _launch_command() -> list[str]:
@@ -26,6 +27,11 @@ def open_debug_console() -> tuple[bool, str]:
         _process = None
 
     if _process is not None and _process.poll() is None:
+        if sys.platform == "win32":
+            from src.core.win32_window import raise_window_by_title
+
+            if raise_window_by_title(_CONSOLE_TITLE_MARKER):
+                return True, "Консоль отладки уже открыта."
         return True, "Консоль отладки уже открыта."
 
     if packaged_app_executable() is None:

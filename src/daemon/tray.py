@@ -92,7 +92,7 @@ class TrayController:
             load_tray_icon(running=running),
             APP_NAME,
             menu,
-            default=self._menu_open,
+            on_double_click=self._menu_open,
         )
         self._poll_stop.clear()
         self._poll_thread = threading.Thread(

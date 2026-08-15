@@ -26,7 +26,8 @@ from src.ui.pages.home import HomePage
 from src.ui.pages.lists import ListsPage
 from src.ui.pages.strategies import StrategiesPage
 from src.ui.pages.settings import SettingsPage
-from src.ui.notifications import show_toast
+from src.ui.notifications import present_app_update_result
+from src.ui.update_overlay import hide_update_install_overlay, show_update_install_overlay
 
 
 def build_nav_items() -> list[tuple[str, str, str, str]]:
@@ -101,19 +102,42 @@ class TigoApp:
         ):
             return
         self._app_update_started = True
+        auto_install = settings.auto_install_app_updates
+
+        if auto_install:
+            try:
+                self.page.run_thread(lambda: show_update_install_overlay(self.page))
+            except AttributeError:
+                show_update_install_overlay(self.page)
 
         def work() -> None:
             result = (
                 check_and_install_app()
-                if settings.auto_install_app_updates
+                if auto_install
                 else check_app_only()
             )
             ok, message, kind = result
             if ok and message == MSG_APP_UP_TO_DATE:
+                if auto_install:
+                    def hide() -> None:
+                        hide_update_install_overlay(self.page)
+
+                    try:
+                        self.page.run_thread(hide)
+                    except AttributeError:
+                        hide()
                 return
+            if auto_install and not (ok and kind == "success"):
+                def hide() -> None:
+                    hide_update_install_overlay(self.page)
+
+                try:
+                    self.page.run_thread(hide)
+                except AttributeError:
+                    hide()
 
             def notify() -> None:
-                show_toast(self.page, message, kind=kind if ok else "error")
+                present_app_update_result(self.page, ok, message, kind)
 
             try:
                 self.page.run_thread(notify)
@@ -130,7 +154,7 @@ class TigoApp:
         page = self.page
         settings = get_settings()
         register_mono_font(page)
-        page.title = APP_NAME
+        page.title = "Tigo GUI"
         page.bgcolor = T.GROUND
         page.theme = build_flet_theme(build_theme_tokens("light", settings.portal_hue))
         page.dark_theme = build_flet_theme(build_theme_tokens("dark", settings.portal_hue))

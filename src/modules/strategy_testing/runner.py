@@ -4,17 +4,31 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
 from typing import Literal
 
 from src.core.debug_log import debug
+from src.core.settings import (
+    GameFilterMode,
+    IpsetFilterMode,
+    StrategySource,
+    get_settings,
+)
 from src.kernel import runtime_state
-from src.kernel.public import stop_strategy
+from src.kernel.public import (
+    get_runtime_status,
+    start_custom_strategy,
+    start_strategy,
+    stop_strategy,
+)
 from src.kernel.winws_runner import get_runner
-from src.modules.filters.game_filter import get_game_filter_ports, read_game_filter_mode
+from src.modules.filters.game_filter import apply_game_filter, get_game_filter_ports, read_game_filter_mode
+from src.modules.filters.ipset_filter import apply_ipset_mode
 from src.modules.strategies.launcher import build_winws_launch, ensure_runtime_preflight
 from src.modules.strategies.repository import list_strategies
 from src.modules.strategy_testing import journal as tls
 from src.modules.strategy_testing import results as tr
+from src.modules.strategy_testing.dpi_probe import format_dpi_lines, probe_dpi_with_callback
 from src.modules.strategy_testing.probe import format_probe_lines, probe_all_targets_with_callback, score_results
 
 
@@ -28,6 +42,17 @@ INTER_STRATEGY_PAUSE_SECONDS = 2.0
 TestPhase = Literal["idle", "testing", "pause"]
 
 
+@dataclass
+class _FilterSnapshot:
+    version: str
+    game_filter: GameFilterMode
+    ipset_filter: IpsetFilterMode
+    was_running: bool
+    selected_strategy: str | None
+    strategy_source: StrategySource
+    custom_strategy_args: str
+
+
 def _score_to_status(passed: int, total: int) -> str:
     if total <= 0:
         return "unknown"
@@ -37,6 +62,36 @@ def _score_to_status(passed: int, total: int) -> str:
     if ratio >= 0.5:
         return "partial"
     return "failed"
+
+
+def _capture_filter_snapshot(version: str) -> _FilterSnapshot:
+    settings = get_settings()
+    return _FilterSnapshot(
+        version=version,
+        game_filter=settings.game_filter,
+        ipset_filter=settings.ipset_filter,
+        was_running=get_runtime_status().running,
+        selected_strategy=settings.selected_strategy,
+        strategy_source=settings.strategy_source,
+        custom_strategy_args=settings.custom_strategy_args,
+    )
+
+
+def _restore_filter_snapshot(snapshot: _FilterSnapshot) -> None:
+    apply_game_filter(snapshot.version, snapshot.game_filter)
+    apply_ipset_mode(snapshot.version, snapshot.ipset_filter)
+    if not snapshot.was_running:
+        return
+    if snapshot.strategy_source == "custom":
+        if snapshot.custom_strategy_args.strip():
+            start_custom_strategy(snapshot.custom_strategy_args)
+        return
+    if not snapshot.selected_strategy:
+        return
+    for strategy in list_strategies():
+        if strategy.id == snapshot.selected_strategy:
+            start_strategy(strategy)
+            break
 
 
 class StrategyTestJob:
@@ -56,6 +111,7 @@ class StrategyTestRunner:
         self._phase: TestPhase = "idle"
         self._active_strategy_id: str | None = None
         self._version: str | None = None
+        self._filter_snapshot: _FilterSnapshot | None = None
 
     @property
     def running(self) -> bool:
@@ -99,8 +155,8 @@ class StrategyTestRunner:
             return False, "Тесты уже выполняются."
         if not job.strategy_ids:
             return False, "Не выбрано ни одной стратегии."
-        if job.test_type != "standard":
-            return False, "DPI-тесты пока не поддерживаются в Python-режиме."
+        if job.test_type not in {"standard", "dpi"}:
+            return False, f"Неизвестный тип теста: {job.test_type}."
 
         from src.modules.strategy_testing.curl import curl_available
 
@@ -112,6 +168,7 @@ class StrategyTestRunner:
         self._phase = "idle"
         self._active_strategy_id = None
         self._version = job.version
+        self._filter_snapshot = None
         with self._completed_lock:
             self._completed_strategy_ids.clear()
             self._planned_strategy_ids = list(job.strategy_ids)
@@ -128,6 +185,13 @@ class StrategyTestRunner:
                 if on_done:
                     on_done(False, str(exc))
             finally:
+                snapshot = self._filter_snapshot
+                self._filter_snapshot = None
+                if snapshot is not None:
+                    try:
+                        _restore_filter_snapshot(snapshot)
+                    except Exception as exc:  # noqa: BLE001
+                        debug("strategy_testing", f"filter restore failed: {exc}", level="error")
                 runtime_state.set_tests_running(False)
                 stop_strategy(cleanup_windivert=False)
                 self._phase = "idle"
@@ -137,6 +201,54 @@ class StrategyTestRunner:
         self._thread = threading.Thread(target=runner, daemon=True)
         self._thread.start()
         return True, "Тесты запущены."
+
+    def _probe_strategy(
+        self,
+        *,
+        strategy,
+        job: StrategyTestJob,
+        runner,
+        index: int,
+        total: int,
+    ) -> None:
+        tls.append("> Проверка целей…", level=tls.TestLogLevel.INFO)
+        tr.set_probe_loading(strategy.id, version=job.version, test_type=job.test_type)
+
+        def on_target(result) -> None:
+            tr.apply_probe_result(strategy.id, result, version=job.version)
+
+        if job.test_type == "dpi":
+            results = probe_dpi_with_callback(on_target)
+            format_lines = format_dpi_lines
+        else:
+            results = probe_all_targets_with_callback(on_target)
+            format_lines = format_probe_lines
+
+        for line in format_lines(results):
+            tls.append_from_console(line)
+
+        passed, score_total = score_results(results)
+        status = _score_to_status(passed, score_total) if score_total else "unknown"
+        detail = ""
+        if status == "unknown":
+            detail = "Нет данных для оценки (0 целей)."
+        tr.set_result(
+            strategy.id,
+            version=job.version,
+            state=status,  # type: ignore[arg-type]
+            rows=results,
+            score=(passed, score_total),
+            detail=detail,
+        )
+        self._mark_completed(strategy.id)
+        tls.append(
+            f"{strategy.display_name}: {_STATUS_LABELS[status]} ({passed}/{score_total})",
+            level=tls.TestLogLevel.OK if status == "full" else tls.TestLogLevel.INFO,
+        )
+        debug("strategy_testing", f"{strategy.display_name}: {status} ({passed}/{score_total})")
+        runner.stop()
+        self._phase = "pause"
+        time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
 
     def _run_job(self, job: StrategyTestJob) -> tuple[bool, str]:
         strategies = {s.id: s for s in list_strategies()}
@@ -150,11 +262,13 @@ class StrategyTestRunner:
             tls.append(message, level=tls.TestLogLevel.ERROR)
             return False, message
 
+        self._filter_snapshot = _capture_filter_snapshot(job.version)
         runtime_state.set_tests_running(True)
         stop_strategy(cleanup_windivert=False)
         tr.begin_test_run(version=job.version)
         tls.clear()
-        tls.append("Запуск тестов (стандартный)…", level=tls.TestLogLevel.INFO)
+        label = "DPI" if job.test_type == "dpi" else "стандартный"
+        tls.append(f"Запуск тестов ({label})…", level=tls.TestLogLevel.INFO)
         gf_mode = read_game_filter_mode(job.version)
         gf_tcp, gf_udp = get_game_filter_ports(gf_mode)
         gf_label = {
@@ -181,7 +295,7 @@ class StrategyTestRunner:
             debug("strategy_testing", f"testing [{index}/{len(selected)}] {strategy.display_name}")
             self._phase = "testing"
             self._active_strategy_id = strategy.id
-            tr.set_running(strategy.id, version=job.version)
+            tr.set_running(strategy.id, version=job.version, test_type=job.test_type)
             tls.append(
                 f"--- [{index}/{len(selected)}] {strategy.display_name} ---",
                 level=tls.TestLogLevel.INFO,
@@ -221,39 +335,13 @@ class StrategyTestRunner:
                 time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
                 continue
 
-            tls.append("> Проверка целей…", level=tls.TestLogLevel.INFO)
-            tr.set_probe_loading(strategy.id, version=job.version)
-
-            def on_target(result) -> None:
-                tr.apply_probe_result(strategy.id, result, version=job.version)
-
-            results = probe_all_targets_with_callback(on_target)
-            for line in format_probe_lines(results):
-                tls.append_from_console(line)
-
-            passed, total = score_results(results)
-            status = _score_to_status(passed, total) if total else "unknown"
-            detail = ""
-            if status == "unknown":
-                detail = "Нет данных для оценки (0 целей)."
-            tr.set_result(
-                strategy.id,
-                version=job.version,
-                state=status,  # type: ignore[arg-type]
-                rows=results,
-                score=(passed, total),
-                detail=detail,
+            self._probe_strategy(
+                strategy=strategy,
+                job=job,
+                runner=runner,
+                index=index,
+                total=len(selected),
             )
-            self._mark_completed(strategy.id)
-            tls.append(
-                f"{strategy.display_name}: {_STATUS_LABELS[status]} ({passed}/{total})",
-                level=tls.TestLogLevel.OK if status == "full" else tls.TestLogLevel.INFO,
-            )
-            debug("strategy_testing", f"{strategy.display_name}: {status} ({passed}/{total})")
-
-            runner.stop()
-            self._phase = "pause"
-            time.sleep(INTER_STRATEGY_PAUSE_SECONDS)
 
         if not self._stop_requested:
             tls.append("Все тесты завершены.", level=tls.TestLogLevel.OK)

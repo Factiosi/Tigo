@@ -82,26 +82,42 @@ class AppSettings:
 
 
 _settings: AppSettings | None = None
+_settings_snapshot: AppSettings | None = None
+
+
+def _snapshot(settings: AppSettings) -> AppSettings:
+    return AppSettings(**{field.name: getattr(settings, field.name) for field in fields(AppSettings)})
+
+
+def _set_settings_cache(settings: AppSettings) -> AppSettings:
+    global _settings, _settings_snapshot
+    _settings = settings
+    _settings_snapshot = _snapshot(settings)
+    return settings
 
 
 def get_settings() -> AppSettings:
     global _settings
     if _settings is None:
-        _settings = AppSettings.load()
+        _set_settings_cache(AppSettings.load())
     return _settings
 
 
 def save_settings(settings: AppSettings | None = None) -> None:
-    global _settings
-    target = settings or get_settings()
-    target.save()
-    _settings = target
+    disk = AppSettings.load()
+    source = settings or get_settings()
+    snapshot = _settings_snapshot or _snapshot(disk)
+    for field in fields(AppSettings):
+        incoming = getattr(source, field.name)
+        baseline = getattr(snapshot, field.name)
+        if incoming != baseline:
+            setattr(disk, field.name, incoming)
+    disk.save()
+    _set_settings_cache(disk)
 
 
 def reload_settings() -> AppSettings:
-    global _settings
-    _settings = AppSettings.load()
-    return _settings
+    return _set_settings_cache(AppSettings.load())
 
 
 def effective_storage_root() -> Path:

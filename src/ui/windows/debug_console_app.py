@@ -30,7 +30,7 @@ def main(page: ft.Page) -> None:
     settings = get_settings()
     apply_theme(settings.theme_mode, settings.portal_hue)
     register_mono_font(page)
-    page.title = f"{APP_NAME} {__version__} — консоль отладки"
+    page.title = f"{APP_NAME} — консоль отладки"
     page.bgcolor = T.GROUND
     page.theme = build_flet_theme(build_theme_tokens("light", settings.portal_hue))
     page.dark_theme = build_flet_theme(build_theme_tokens("dark", settings.portal_hue))
@@ -46,7 +46,7 @@ def main(page: ft.Page) -> None:
 
     log_text = ft.Text(
         " ",
-        size=12,
+        size=13,
         color=T.TEXT,
         font_family=_MONO,
         selectable=True,

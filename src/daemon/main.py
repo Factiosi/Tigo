@@ -42,6 +42,12 @@ class TigoDaemon:
         info("daemon", f"starting {APP_NAME} daemon")
         get_settings()
         self._ipc.start()
+        from src.core.process_label import set_process_description
+
+        if set_process_description("Tigo daemon"):
+            info("daemon", "process description: Tigo daemon")
+        else:
+            warn("daemon", "failed to set process description")
         info("daemon", "IPC ready")
 
         self._tray = TrayController(

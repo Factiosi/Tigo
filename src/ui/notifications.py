@@ -210,9 +210,6 @@ def show_toast(
 
 def _start_app_update_install(page: ft.Page) -> None:
     from src.modules.updates.app import check_and_install_app
-    from src.ui.update_overlay import hide_update_install_overlay, show_update_install_overlay
-
-    show_update_install_overlay(page)
 
     def work() -> None:
         ok, message, kind = check_and_install_app()
@@ -220,7 +217,6 @@ def _start_app_update_install(page: ft.Page) -> None:
         def notify() -> None:
             if ok and kind == "success":
                 return
-            hide_update_install_overlay(page)
             show_toast(page, message, kind=kind if ok else "error")
 
         _schedule_on_page(page, notify)

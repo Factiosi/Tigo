@@ -60,16 +60,21 @@ def apply_autostart_setting(enabled: bool) -> tuple[bool, str]:
 
 
 def should_start_hidden(argv: list[str] | None = None) -> bool:
+    """Return True when the GUI window should open hidden/minimized."""
     args = argv if argv is not None else sys.argv
-    if "--tray" in args:
-        return True
+    return "--tray" in args and "--ui" in args
+
+
+def should_launch_gui(argv: list[str] | None = None) -> bool:
+    """Return False when the user wants daemon-only startup from a shortcut."""
+    args = argv if argv is not None else sys.argv
     if "--ui" in args:
-        return False
+        return True
     if not is_runtime_available():
-        return False
+        return True
     from src.core.settings import get_settings
 
-    return get_settings().start_minimized_to_tray
+    return not get_settings().start_minimized_to_tray
 
 
 def ensure_daemon_running(*, timeout: float = 15.0) -> tuple[bool, str, bool]:

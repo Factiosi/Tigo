@@ -11,7 +11,7 @@ from unittest.mock import patch
 from src.core.settings import AppSettings
 from src.daemon.protocol import DaemonStatus, status_from_dict, status_to_dict
 from src.kernel.public import get_effective_runtime_status
-from src.modules.lifecycle.public import should_start_hidden
+from src.modules.lifecycle.public import should_launch_gui, should_start_hidden
 from src.modules.updates.github import _safe_extract_zip
 from src.modules.updates.service import ensure_runtime_installed
 
@@ -81,10 +81,18 @@ class ProtocolTests(unittest.TestCase):
 
 class WindowLaunchTests(unittest.TestCase):
     def test_tray_flag_starts_hidden(self) -> None:
-        self.assertTrue(should_start_hidden(["run.py", "--tray"]))
+        self.assertTrue(should_start_hidden(["run.py", "--ui", "--tray"]))
 
     def test_explicit_ui_flag_starts_visible(self) -> None:
         self.assertFalse(should_start_hidden(["run.py", "--ui"]))
+
+    def test_start_minimized_skips_gui_without_ui_flag(self) -> None:
+        settings = AppSettings(start_minimized_to_tray=True)
+        with (
+            patch("src.modules.lifecycle.public.is_runtime_available", return_value=True),
+            patch("src.core.settings.get_settings", return_value=settings),
+        ):
+            self.assertFalse(should_launch_gui(["Tigo.exe"]))
 
 
 class RuntimeBootstrapTests(unittest.TestCase):

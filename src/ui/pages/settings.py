@@ -438,17 +438,13 @@ class SettingsPage:
         self._run_updates_bg(work, done, active="tigo:check")
 
     def _check_and_install_app_updates(self, _: ft.ControlEvent) -> None:
-        from src.ui.update_overlay import hide_update_install_overlay, show_update_install_overlay
-
-        show_update_install_overlay(self.page)
-
         def work():
             return check_and_install_app()
 
         def done(result):
             ok, msg, kind = result
-            if not (ok and kind == "success"):
-                hide_update_install_overlay(self.page)
+            if ok and kind == "success":
+                return
             show_toast(self.page, msg, kind=kind if ok else "error")
 
         self._run_updates_bg(work, done, active="tigo:install")

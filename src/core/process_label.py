@@ -25,16 +25,16 @@ def _apply_process_description(process_handle: int, label: str) -> bool:
     return result == 0
 
 
-def set_process_description(label: str) -> None:
+def set_process_description(label: str) -> bool:
     if sys.platform != "win32" or not label.strip():
-        return
+        return False
     try:
         import ctypes
 
         process = ctypes.windll.kernel32.GetCurrentProcess()
-        _apply_process_description(process, label)
+        return _apply_process_description(process, label)
     except (AttributeError, OSError, TypeError, ValueError):
-        pass
+        return False
 
 
 def set_process_description_for_pid(pid: int, label: str) -> bool:
@@ -103,3 +103,18 @@ def label_flet_view_process(label: str, *, parent_pid: int | None = None) -> boo
         if exe_name.casefold() == "flet.exe":
             labeled = set_process_description_for_pid(pid, label) or labeled
     return labeled
+
+
+def schedule_flet_process_label(page, label: str, *, attempts: int = 12, interval: float = 0.5) -> None:
+    """Retry flet.exe labeling because the client starts after the page opens."""
+    import asyncio
+
+    if sys.platform != "win32" or not label.strip():
+        return
+
+    async def _retry() -> None:
+        for _ in range(attempts):
+            label_flet_view_process(label)
+            await asyncio.sleep(interval)
+
+    page.run_task(_retry)

@@ -7,7 +7,7 @@ import threading
 import flet as ft
 
 from src.core.branding import app_window_icon_path
-from src.core.process_label import label_flet_view_process
+from src.core.process_label import schedule_flet_process_label
 from src.core.events import subscribe, unsubscribe
 from src.core.fonts import register_mono_font
 from src.core.paths import APP_NAME, is_packaged_app
@@ -20,7 +20,12 @@ from src.modules.updates.app import (
     check_app_only,
 )
 from src.theme import T, apply_theme, build_flet_theme, build_theme_tokens
-from src.modules.lifecycle.public import handle_window_close, should_start_hidden, start_daemon_watchdog
+from src.modules.lifecycle.public import (
+    handle_window_close,
+    should_launch_gui,
+    should_start_hidden,
+    start_daemon_watchdog,
+)
 from src.ui.components import ANIM, close_active_select, ui_text
 from src.ui.pages.dns import DnsPage
 from src.ui.pages.home import HomePage
@@ -28,7 +33,6 @@ from src.ui.pages.lists import ListsPage
 from src.ui.pages.strategies import StrategiesPage
 from src.ui.pages.settings import SettingsPage
 from src.ui.notifications import present_app_update_result
-from src.ui.update_overlay import hide_update_install_overlay, show_update_install_overlay
 
 
 def build_nav_items() -> list[tuple[str, str, str, str]]:
@@ -106,12 +110,6 @@ class TigoApp:
         self._app_update_started = True
         auto_install = settings.auto_install_app_updates
 
-        if auto_install:
-            try:
-                self.page.run_thread(lambda: show_update_install_overlay(self.page))
-            except AttributeError:
-                show_update_install_overlay(self.page)
-
         def work() -> None:
             result = (
                 check_and_install_app()
@@ -120,23 +118,9 @@ class TigoApp:
             )
             ok, message, kind = result
             if ok and message == MSG_APP_UP_TO_DATE:
-                if auto_install:
-                    def hide() -> None:
-                        hide_update_install_overlay(self.page)
-
-                    try:
-                        self.page.run_thread(hide)
-                    except AttributeError:
-                        hide()
                 return
-            if auto_install and not (ok and kind == "success"):
-                def hide() -> None:
-                    hide_update_install_overlay(self.page)
-
-                try:
-                    self.page.run_thread(hide)
-                except AttributeError:
-                    hide()
+            if auto_install and ok and kind == "success":
+                return
 
             def notify() -> None:
                 present_app_update_result(self.page, ok, message, kind)
@@ -157,7 +141,7 @@ class TigoApp:
         settings = get_settings()
         register_mono_font(page)
         page.title = APP_NAME
-        label_flet_view_process(f"{APP_NAME} GUI")
+        schedule_flet_process_label(page, APP_NAME)
         page.bgcolor = T.GROUND
         page.theme = build_flet_theme(build_theme_tokens("light", settings.portal_hue))
         page.dark_theme = build_flet_theme(build_theme_tokens("dark", settings.portal_hue))

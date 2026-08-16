@@ -44,11 +44,33 @@ def _is_debug_console_mode(argv: list[str]) -> bool:
     return "--debug-console" in argv
 
 
+def _is_post_update_relaunch(argv: list[str]) -> bool:
+    if os.environ.get("TIGORELAUNCH", "").strip() == "1":
+        return True
+    return any(
+        part.strip().endswith("=1")
+        for arg in argv
+        for part in arg.split(":", 1)[-1].split("&")
+        if "TIGORELAUNCH" in part.upper()
+    )
+
+
+def _signal_update_splash_done() -> None:
+    try:
+        from src.modules.updates.splash_launcher import signal_update_splash_done
+
+        signal_update_splash_done()
+    except Exception:
+        pass
+
+
 def main() -> None:
     from src.core.paths import verify_frozen_layout
 
     verify_frozen_layout()
     argv = sys.argv
+    if _is_post_update_relaunch(argv):
+        _signal_update_splash_done()
     if _is_debug_console_mode(argv):
         _require_dependencies(include_flet=True)
         import flet as ft
@@ -102,7 +124,7 @@ def main() -> None:
     from src.core.paths import APP_NAME, ensure_layout, program_root
     from src.core.settings import get_settings
     from src.daemon.ipc import register_gui_with_daemon
-    from src.modules.lifecycle.public import require_daemon_for_gui
+    from src.modules.lifecycle.public import require_daemon_for_gui, should_launch_gui
     from src.ui.app import main as ui_main
 
     log_info("bootstrap", f"starting {APP_NAME} GUI")
@@ -113,6 +135,11 @@ def main() -> None:
         log_info("bootstrap", "elevation required")
         if not ensure_admin():
             sys.exit(0)
+        sys.exit(0)
+
+    if not should_launch_gui():
+        require_daemon_for_gui()
+        log_info("bootstrap", "GUI suppressed by start_minimized_to_tray")
         sys.exit(0)
 
     require_daemon_for_gui()

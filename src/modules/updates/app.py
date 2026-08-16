@@ -15,6 +15,8 @@ import httpx
 from src.core.debug_log import debug, info
 from src.core.paths import TIGO_RELEASE_API, is_packaged_app, temp_dir
 from src.core.version import __version__
+from src.modules.updates.splash_launcher import launch_update_splash
+from src.modules.updates.splash_status import write_update_status
 
 MSG_APP_UP_TO_DATE = "У вас последняя актуальная версия Tigo"
 MSG_APP_UPDATE_AVAILABLE = "Доступна новая версия Tigo"
@@ -194,15 +196,39 @@ def check_app_only() -> tuple[bool, str, str]:
 def check_and_install_app() -> tuple[bool, str, str]:
     if not _install_lock.acquire(blocking=False):
         return False, MSG_APP_INSTALL_IN_PROGRESS, "warning"
+    splash_started = False
     try:
         update = fetch_app_update()
         if update is None:
             return True, MSG_APP_UP_TO_DATE, "success"
+        splash_started = launch_update_splash(target_version=update.version)
+        write_update_status(
+            "downloading",
+            f"Скачивание Tigo {update.version}...",
+            target_version=update.version,
+        )
         installer = download_verified_installer(update)
+        write_update_status(
+            "verifying",
+            "Проверка установщика...",
+            target_version=update.version,
+        )
+        write_update_status(
+            "installing",
+            "Установка обновления...",
+            target_version=update.version,
+        )
         launch_installer(installer)
+        write_update_status(
+            "restarting",
+            "Запуск Tigo после обновления...",
+            target_version=update.version,
+        )
         return True, f"Tigo {update.version} загружен. Запускается установка.", "success"
     except Exception as exc:  # noqa: BLE001
         debug("app_updates", f"install failed: {exc}", level="error")
+        if splash_started:
+            write_update_status("failed", _format_install_error(exc))
         return False, f"Не удалось установить обновление Tigo: {_format_install_error(exc)}", "error"
     finally:
         _install_lock.release()

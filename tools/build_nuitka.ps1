@@ -99,7 +99,55 @@ foreach ($intermediate in @("run.build", "run.onefile-build")) {
     }
 }
 
+Write-Host "Building TigoUpdate splash..."
+$splashArgs = @(
+    "-m", "nuitka",
+    "--standalone",
+    "--assume-yes-for-downloads",
+    "--output-dir=$DistRoot",
+    "--output-filename=TigoUpdate.exe",
+    "--windows-icon-from-ico=$icon",
+    "--windows-console-mode=disable",
+    "--product-name=Tigo Update",
+    "--file-version=$Version",
+    "--company-name=Tigo",
+    "--include-module=src.modules.updates.splash_status",
+    "--include-module=src.update_splash.app",
+    "--nofollow-import-to=tkinter",
+    "--nofollow-import-to=unittest",
+    "--nofollow-import-to=test",
+    "--nofollow-import-to=pytest",
+    "--nofollow-import-to=mcp",
+    "--nofollow-import-to=flet",
+    (Join-Path $Repo "update_splash_main.py")
+)
+
+& $Py @splashArgs
+if ($LASTEXITCODE -ne 0) { throw "Nuitka splash build failed with exit code $LASTEXITCODE" }
+
+$splashBuiltDir = Join-Path $DistRoot "update_splash_main.dist"
+if (-not (Test-Path $splashBuiltDir)) {
+    $splashBuiltDir = Get-ChildItem $DistRoot -Directory | Where-Object { $_.Name -like "update_splash_main*.dist" } | Select-Object -First 1
+    if ($splashBuiltDir) { $splashBuiltDir = $splashBuiltDir.FullName }
+}
+if (-not (Test-Path $splashBuiltDir)) { throw "Nuitka splash output directory not found in dist/" }
+
+$splashExe = Join-Path $splashBuiltDir "TigoUpdate.exe"
+if (-not (Test-Path $splashExe)) {
+    $legacySplash = Join-Path $splashBuiltDir "update_splash_main.exe"
+    if (Test-Path $legacySplash) { Rename-Item $legacySplash "TigoUpdate.exe" }
+}
+Copy-Item -Path (Join-Path $splashBuiltDir "TigoUpdate.exe") -Destination (Join-Path $OutDir "TigoUpdate.exe") -Force
+
+foreach ($intermediate in @("update_splash_main.build", "update_splash_main.dist", "update_splash_main.onefile-build")) {
+    $path = Join-Path $DistRoot $intermediate
+    if (Test-Path $path) {
+        Remove-Item -Recurse -Force $path
+    }
+}
+
 Write-Host ""
 Write-Host "Build complete: $OutDir"
 Write-Host "  Tigo.exe"
+Write-Host "  TigoUpdate.exe"
 Write-Host "  flet_client\flet.exe"

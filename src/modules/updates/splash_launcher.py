@@ -22,20 +22,21 @@ def bundled_update_splash_path():
 
 
 def ensure_update_splash_exe():
+    """Return TigoUpdate.exe from AppData, seeding once from Program Files if present."""
     if not is_packaged_app():
         return None
+    dest = update_splash_install_path()
+    if dest.is_file():
+        return dest
     bundled = bundled_update_splash_path()
     if not bundled.is_file():
-        debug("app_updates", "bundled TigoUpdate.exe is missing", level="error")
         return None
-    dest = update_splash_install_path()
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if not dest.exists() or bundled.stat().st_mtime_ns > dest.stat().st_mtime_ns:
-            shutil.copy2(bundled, dest)
+        shutil.copy2(bundled, dest)
     except OSError as exc:
         debug("app_updates", f"failed to install TigoUpdate.exe: {exc}", level="error")
-        return bundled if bundled.is_file() else None
+        return bundled
     return dest
 
 

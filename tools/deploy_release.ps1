@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
+    [string]$ReleaseNotes = "",
     [switch]$Publish,
     [switch]$DryRun
 )
@@ -44,8 +45,9 @@ $SourceVersion = & $Py -c "from src.core.version import __version__; print(__ver
 Assert-True ($SourceVersion -eq $Version) "src/core/version.py is $SourceVersion, expected $Version."
 $IssText = Get-Content $InstallerScript -Raw
 Assert-True ($IssText -match "#define MyAppVersion `"$([regex]::Escape($Version))`"") "Inno version does not match $Version."
-$Changelog = Get-Content (Join-Path $Repo "docs\CHANGELOG.md") -Raw -Encoding UTF8
-Assert-True ($Changelog -match "(?m)^## $([regex]::Escape($Version))\r?$") "CHANGELOG has no $Version section."
+if ($Publish -and -not $ReleaseNotes.Trim()) {
+    throw "Pass -ReleaseNotes for -Publish."
+}
 
 $Branch = (git branch --show-current).Trim()
 Assert-True ($Branch -eq "master") "Release must run from master, current branch: $Branch"
@@ -115,16 +117,11 @@ Invoke-Checked "gh" @(
 Invoke-Checked "git" @("tag", "-a", $Tag, "-m", "Tigo $Version")
 Invoke-Checked "git" @("push", "origin", $Tag)
 
-$NotesMatch = [regex]::Match(
-    $Changelog,
-    "(?ms)^## $([regex]::Escape($Version))\r?\n\s*(.*?)(?=^## |\z)"
-)
-Assert-True $NotesMatch.Success "Could not extract release notes."
 $NotesFile = Join-Path $env:TEMP "tigo-release-$Version.md"
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText(
     $NotesFile,
-    $NotesMatch.Groups[1].Value.Trim(),
+    $ReleaseNotes.Trim(),
     $Utf8NoBom
 )
 try {

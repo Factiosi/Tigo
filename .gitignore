@@ -11,10 +11,17 @@ build/
 node_modules/
 tools/node_modules/
 
-# IDE / agent
+# IDE / agent (local only, not in public repo)
 .vscode/
 .idea/
 .cursor/
+AGENTS.md
+docs/AGENTS-UI-SELECT.md
+docs/AUTOMATION.md
+docs/CHANGELOG.md
+tools/tigo_mcp.py
+tests/test_mcp_server.py
+requirements/dev.txt
 
 # dev-only scripts
 tools/measure_resources.ps1

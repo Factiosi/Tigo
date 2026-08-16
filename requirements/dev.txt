@@ -1,2 +1,0 @@
--r base.txt
-mcp==2.0.0

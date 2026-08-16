@@ -1,5 +1,5 @@
-# Optional one-off build for TigoUpdate.exe (shipped only in release 1.3.0).
-# Source stays in the repo; regular Tigo releases no longer bundle this binary.
+# Build TigoUpdate.exe ONCE, then commit only the source — not this binary.
+# Output: tools/release_assets/TigoUpdate.exe (gitignored, copied into every installer).
 $ErrorActionPreference = "Stop"
 
 $Repo = Split-Path -Parent $PSScriptRoot
@@ -7,7 +7,8 @@ $Py = Join-Path $Repo ".venv\Scripts\python.exe"
 if (-not (Test-Path $Py)) { $Py = "python" }
 
 $DistRoot = Join-Path $Repo "dist"
-$OutDir = Join-Path $DistRoot "Tigo"
+$AssetDir = Join-Path $Repo "tools\release_assets"
+$AssetExe = Join-Path $AssetDir "TigoUpdate.exe"
 $VersionFile = Join-Path $Repo "src\core\version.py"
 $Version = "1.0.0.0"
 if (Test-Path $VersionFile) {
@@ -22,9 +23,9 @@ if (-not (Test-Path $icon)) {
     throw "icons\app.ico is required."
 }
 
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+New-Item -ItemType Directory -Force -Path $AssetDir | Out-Null
 
-Write-Host "Building TigoUpdate $Version with Nuitka..."
+Write-Host "Building TigoUpdate $Version with Nuitka (one-off artifact)..."
 $splashArgs = @(
     "-m", "nuitka",
     "--standalone",
@@ -63,7 +64,7 @@ if (-not (Test-Path $splashExe)) {
     if (Test-Path $legacySplash) { Rename-Item $legacySplash "TigoUpdate.exe" }
 }
 
-Copy-Item -Path $splashExe -Destination (Join-Path $OutDir "TigoUpdate.exe") -Force
+Copy-Item -Path $splashExe -Destination $AssetExe -Force
 
 foreach ($intermediate in @("update_splash_main.build", "update_splash_main.dist", "update_splash_main.onefile-build")) {
     $path = Join-Path $DistRoot $intermediate
@@ -72,4 +73,5 @@ foreach ($intermediate in @("update_splash_main.build", "update_splash_main.dist
     }
 }
 
-Write-Host "TigoUpdate.exe -> $OutDir"
+Write-Host "Saved frozen artifact: $AssetExe"
+Write-Host "This file is gitignored; build_nuitka.ps1 copies it into dist\Tigo\ for installers."

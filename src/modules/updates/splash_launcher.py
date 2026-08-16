@@ -1,20 +1,15 @@
-"""Launch the standalone TigoUpdate.exe progress window."""
+"""Launch TigoUpdate.exe from the install directory (Program Files)."""
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 
 from src.core.debug_log import debug
-from src.core.paths import app_data_root, is_packaged_app, program_root
+from src.core.paths import is_packaged_app, program_root
 from src.modules.updates.splash_status import write_update_status
 
 _SPLASH_NAME = "TigoUpdate.exe"
-
-
-def update_splash_install_path():
-    return app_data_root() / _SPLASH_NAME
 
 
 def bundled_update_splash_path():
@@ -22,22 +17,10 @@ def bundled_update_splash_path():
 
 
 def ensure_update_splash_exe():
-    """Return TigoUpdate.exe from AppData, seeding once from Program Files if present."""
     if not is_packaged_app():
         return None
-    dest = update_splash_install_path()
-    if dest.is_file():
-        return dest
     bundled = bundled_update_splash_path()
-    if not bundled.is_file():
-        return None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        shutil.copy2(bundled, dest)
-    except OSError as exc:
-        debug("app_updates", f"failed to install TigoUpdate.exe: {exc}", level="error")
-        return bundled
-    return dest
+    return bundled if bundled.is_file() else None
 
 
 def launch_update_splash(*, target_version: str = "") -> bool:
@@ -45,6 +28,7 @@ def launch_update_splash(*, target_version: str = "") -> bool:
         return False
     exe = ensure_update_splash_exe()
     if exe is None:
+        debug("app_updates", "TigoUpdate.exe is missing next to Tigo.exe", level="error")
         return False
     write_update_status(
         "checking",

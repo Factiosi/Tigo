@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File tools\build_nuitka.ps1
 
 Скрипт пересоздаёт `dist\Tigo\` и после успешной сборки удаляет промежуточный `dist\run.build\`.
 
-Результат: **вся папка** `dist\Tigo\` — `Tigo.exe`, `flet_client\`, `icons\`, DLL и прочие зависимости Nuitka. Локальные `bin\` и `utils\` намеренно не копируются.
+Результат: **вся папка** `dist\Tigo\` — `Tigo.exe`, `TigoUpdate.exe`, `flet_client\`, `icons\`, DLL и прочие зависимости Nuitka. Локальные `bin\` и `utils\` намеренно не копируются.
 
 > **Важно:** распространяйте или копируйте **целиком папку** `dist\Tigo\`, а не один `Tigo.exe`. Без `flet_client\` и соседних DLL приложение не запустится.
 
@@ -66,7 +66,15 @@ powershell -ExecutionPolicy Bypass -File tools\deploy_release.ps1 -Version 1.2.2
 
 Скрипт запускает unit-тесты, пересобирает standalone, проверяет отсутствие MCP и стороннего runtime, создаёт installer и SHA-256, отправляет `master`, tag и GitHub Release.
 
-`TigoUpdate.exe` (окно прогресса самообновления) **включался только в релиз 1.3.0**. Исходники остаются в репозитории (`update_splash_main.py`, `src/update_splash/`); при необходимости собрать вручную: `powershell -File tools\build_update_splash.ps1`. После установки 1.3.0 бинарник копируется в `%APPDATA%\Tigo\` и используется при следующих обновлениях Tigo.
+`TigoUpdate.exe` (окно прогресса самообновления) собирается **один раз** локально и не коммитится в git:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_update_splash.ps1
+```
+
+Артефакт сохраняется в `tools/release_assets/TigoUpdate.exe` (gitignored). `build_nuitka.ps1` копирует его в `dist\Tigo\` рядом с `Tigo.exe`; installer кладёт бинарник в `{Program Files}\Tigo\`. Исходники: `update_splash_main.py`, `src/update_splash/`.
+
+Релиз **1.3.1** однократно удаляет устаревшую копию `%APPDATA%\Tigo\TigoUpdate.exe` при любом запуске (миграция только в этом релизе, не в последующих).
 
 ## Проверка
 

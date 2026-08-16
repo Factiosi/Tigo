@@ -99,7 +99,14 @@ foreach ($intermediate in @("run.build", "run.onefile-build")) {
     }
 }
 
+$FrozenSplash = Join-Path $Repo "tools\release_assets\TigoUpdate.exe"
+if (-not (Test-Path $FrozenSplash)) {
+    throw "Missing tools\release_assets\TigoUpdate.exe. Build it once: powershell -File tools\build_update_splash.ps1"
+}
+Copy-Item -Path $FrozenSplash -Destination (Join-Path $OutDir "TigoUpdate.exe") -Force
+
 Write-Host ""
 Write-Host "Build complete: $OutDir"
 Write-Host "  Tigo.exe"
+Write-Host "  TigoUpdate.exe (frozen artifact from tools\release_assets\)"
 Write-Host "  flet_client\flet.exe"

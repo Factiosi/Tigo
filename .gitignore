@@ -26,6 +26,9 @@ requirements/dev.txt
 # dev-only scripts
 tools/measure_resources.ps1
 
+# frozen release artifact (built once locally, never committed)
+tools/release_assets/TigoUpdate.exe
+
 # OS / logs
 Thumbs.db
 Desktop.ini

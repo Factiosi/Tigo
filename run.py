@@ -64,9 +64,16 @@ def _signal_update_splash_done() -> None:
         pass
 
 
+def _run_v131_migration() -> None:
+    from src.core.migrations.v131_remove_appdata_tigo_update import run as run_v131
+
+    run_v131()
+
+
 def main() -> None:
     from src.core.paths import verify_frozen_layout
 
+    _run_v131_migration()
     verify_frozen_layout()
     argv = sys.argv
     if _is_post_update_relaunch(argv):

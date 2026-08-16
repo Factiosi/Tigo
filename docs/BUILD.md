@@ -66,6 +66,8 @@ powershell -ExecutionPolicy Bypass -File tools\deploy_release.ps1 -Version 1.2.2
 
 Скрипт запускает unit-тесты, пересобирает standalone, проверяет отсутствие MCP и стороннего runtime, создаёт installer и SHA-256, отправляет `master`, tag и GitHub Release.
 
+`TigoUpdate.exe` (окно прогресса самообновления) **включался только в релиз 1.3.0**. Исходники остаются в репозитории (`update_splash_main.py`, `src/update_splash/`); при необходимости собрать вручную: `powershell -File tools\build_update_splash.ps1`. После установки 1.3.0 бинарник копируется в `%APPDATA%\Tigo\` и используется при следующих обновлениях Tigo.
+
 ## Проверка
 
 ```powershell

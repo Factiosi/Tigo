@@ -6,11 +6,10 @@
 
 - Windows 10 или 11, x64
 - права администратора
-- интернет при первом запуске
 
 ## Установка
 
-1. Откройте [Releases](https://github.com/Factiosi/Tigo/releases/latest) и скачайте установщик `Tigo-Setup-*.exe` (и при желании `.sha256` для проверки).
+1. Откройте [Releases](https://github.com/Factiosi/Tigo/releases/latest) и скачайте установщик `Tigo-Setup-*.exe`.
 2. Запустите установщик.
 3. Откройте Tigo через меню «Пуск».
 4. Подтвердите запрос Windows на запуск от имени администратора.

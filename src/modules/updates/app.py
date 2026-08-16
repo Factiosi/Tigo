@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +22,11 @@ MSG_APP_UPDATE_CLICKABLE = (
     "Доступна новая версия Tigo (нажмите сюда чтобы скачать и установить)"
 )
 MSG_APP_DOWNLOADING = "Новая версия Tigo доступна и скачивается"
+MSG_APP_INSTALL_IN_PROGRESS = (
+    "Установка Tigo уже выполняется. Дождитесь завершения мастера установки."
+)
 _ASSET_RE = re.compile(r"^Tigo-Setup-(\d+\.\d+\.\d+)\.exe$", re.I)
+_install_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,7 @@ def fetch_app_update() -> AppUpdate | None:
 
 
 def _download(client: httpx.Client, url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
     with client.stream("GET", url) as response:
         response.raise_for_status()
         with destination.open("wb") as handle:
@@ -76,28 +83,76 @@ def _download(client: httpx.Client, url: str, destination: Path) -> None:
                 handle.write(chunk)
 
 
+def _read_expected_checksum(checksum_file: Path) -> str:
+    expected = checksum_file.read_text(encoding="utf-8", errors="replace").strip().split()[0].lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise ValueError("Файл контрольной суммы релиза повреждён.")
+    return expected
+
+
+def _verify_file_hash(path: Path, expected: str) -> None:
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != expected:
+        raise ValueError("SHA-256 установщика не совпадает с опубликованной суммой.")
+
+
+def _finalize_installer(partial: Path, installer: Path) -> Path:
+    try:
+        os.replace(partial, installer)
+        return installer
+    except OSError:
+        # Предыдущий установщик может быть занят запущенным setup.exe.
+        return partial
+
+
+def _existing_verified_installer(installer: Path, checksum_file: Path) -> Path | None:
+    if not installer.exists() or not checksum_file.exists():
+        return None
+    try:
+        expected = _read_expected_checksum(checksum_file)
+        _verify_file_hash(installer, expected)
+    except ValueError:
+        installer.unlink(missing_ok=True)
+        return None
+    return installer
+
+
+def _format_install_error(exc: Exception) -> str:
+    winerror = getattr(exc, "winerror", None)
+    if winerror == 32:
+        return MSG_APP_INSTALL_IN_PROGRESS
+    if isinstance(exc, PermissionError) or getattr(exc, "errno", None) == 13:
+        return MSG_APP_INSTALL_IN_PROGRESS
+    return str(exc)
+
+
 def download_verified_installer(update: AppUpdate) -> Path:
     update_dir = temp_dir() / "app-update"
     update_dir.mkdir(parents=True, exist_ok=True)
     installer = update_dir / update.installer_name
+    partial = installer.with_suffix(installer.suffix + ".part")
     checksum_file = update_dir / f"{update.installer_name}.sha256"
+
+    existing = _existing_verified_installer(installer, checksum_file)
+    if existing is not None:
+        return existing
+
+    partial.unlink(missing_ok=True)
     with httpx.Client(
         timeout=httpx.Timeout(300.0, connect=15.0),
         headers={"User-Agent": f"Tigo/{__version__}"},
         follow_redirects=True,
     ) as client:
-        _download(client, update.installer_url, installer)
+        _download(client, update.installer_url, partial)
         _download(client, update.checksum_url, checksum_file)
 
-    expected = checksum_file.read_text(encoding="utf-8", errors="replace").strip().split()[0].lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", expected):
-        installer.unlink(missing_ok=True)
-        raise ValueError("Файл контрольной суммы релиза повреждён.")
-    actual = hashlib.sha256(installer.read_bytes()).hexdigest()
-    if actual != expected:
-        installer.unlink(missing_ok=True)
-        raise ValueError("SHA-256 установщика не совпадает с опубликованной суммой.")
-    return installer
+    expected = _read_expected_checksum(checksum_file)
+    try:
+        _verify_file_hash(partial, expected)
+    except ValueError:
+        partial.unlink(missing_ok=True)
+        raise
+    return _finalize_installer(partial, installer)
 
 
 def launch_installer(installer: Path) -> None:
@@ -137,6 +192,8 @@ def check_app_only() -> tuple[bool, str, str]:
 
 
 def check_and_install_app() -> tuple[bool, str, str]:
+    if not _install_lock.acquire(blocking=False):
+        return False, MSG_APP_INSTALL_IN_PROGRESS, "warning"
     try:
         update = fetch_app_update()
         if update is None:
@@ -146,4 +203,6 @@ def check_and_install_app() -> tuple[bool, str, str]:
         return True, f"Tigo {update.version} загружен. Запускается установка.", "success"
     except Exception as exc:  # noqa: BLE001
         debug("app_updates", f"install failed: {exc}", level="error")
-        return False, f"Не удалось установить обновление Tigo: {exc}", "error"
+        return False, f"Не удалось установить обновление Tigo: {_format_install_error(exc)}", "error"
+    finally:
+        _install_lock.release()

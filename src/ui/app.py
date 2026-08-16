@@ -7,6 +7,7 @@ import threading
 import flet as ft
 
 from src.core.branding import app_window_icon_path
+from src.core.process_label import label_flet_view_process
 from src.core.events import subscribe, unsubscribe
 from src.core.fonts import register_mono_font
 from src.core.paths import APP_NAME, is_packaged_app
@@ -19,7 +20,7 @@ from src.modules.updates.app import (
     check_app_only,
 )
 from src.theme import T, apply_theme, build_flet_theme, build_theme_tokens
-from src.modules.lifecycle.public import handle_window_close, should_start_hidden
+from src.modules.lifecycle.public import handle_window_close, should_start_hidden, start_daemon_watchdog
 from src.ui.components import ANIM, close_active_select, ui_text
 from src.ui.pages.dns import DnsPage
 from src.ui.pages.home import HomePage
@@ -82,6 +83,7 @@ class TigoApp:
         apply_theme(settings.theme_mode, settings.portal_hue)
         self._reset_shell()
         self._configure_page()
+        start_daemon_watchdog(self.page)
         nav = build_nav_items()
         if 0 <= initial_index < len(nav):
             self._route = nav[initial_index][0]
@@ -154,7 +156,8 @@ class TigoApp:
         page = self.page
         settings = get_settings()
         register_mono_font(page)
-        page.title = "Tigo GUI"
+        page.title = APP_NAME
+        label_flet_view_process(f"{APP_NAME} GUI")
         page.bgcolor = T.GROUND
         page.theme = build_flet_theme(build_theme_tokens("light", settings.portal_hue))
         page.dark_theme = build_flet_theme(build_theme_tokens("dark", settings.portal_hue))

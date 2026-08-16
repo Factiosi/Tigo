@@ -129,6 +129,40 @@ def handle_window_close(page, close_action: str) -> bool:
     return True
 
 
+def start_daemon_watchdog(page, *, interval: float = 2.0) -> None:
+    """Close the GUI when the background daemon is no longer reachable."""
+    import asyncio
+
+    from src.daemon.ipc import is_daemon_running
+
+    alive = True
+    prior_disconnect = page.on_disconnect
+
+    def on_disconnect(event) -> None:
+        nonlocal alive
+        alive = False
+        if prior_disconnect is not None:
+            prior_disconnect(event)
+
+    page.on_disconnect = on_disconnect
+
+    async def watch() -> None:
+        while alive:
+            await asyncio.sleep(interval)
+            if not alive:
+                return
+            if is_daemon_running():
+                continue
+            debug("lifecycle", "daemon lost; closing GUI")
+            try:
+                await page.window.destroy()
+            except (RuntimeError, AttributeError, OSError):
+                pass
+            return
+
+    page.run_task(watch)
+
+
 def launch_last_strategy_if_configured(*, from_daemon: bool = False) -> None:
     from src.core.settings import get_settings
     from src.daemon.ipc import is_daemon_running

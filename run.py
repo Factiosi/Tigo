@@ -50,9 +50,6 @@ def main() -> None:
     verify_frozen_layout()
     argv = sys.argv
     if _is_debug_console_mode(argv):
-        from src.core.process_label import set_process_description
-
-        set_process_description("Tigo debug console")
         _require_dependencies(include_flet=True)
         import flet as ft
 
@@ -103,13 +100,11 @@ def main() -> None:
     from src.core.admin import ensure_admin, is_admin
     from src.core.debug_log import info as log_info
     from src.core.paths import APP_NAME, ensure_layout, program_root
-    from src.core.process_label import set_process_description
     from src.core.settings import get_settings
     from src.daemon.ipc import register_gui_with_daemon
     from src.modules.lifecycle.public import require_daemon_for_gui
     from src.ui.app import main as ui_main
 
-    set_process_description("Tigo GUI")
     log_info("bootstrap", f"starting {APP_NAME} GUI")
     get_settings()
     ensure_layout()

@@ -100,7 +100,9 @@ def frozen_flet_view_dir() -> Path | None:
 
 
 def configure_frozen_flet_desktop() -> None:
-    """Point Flet at bundled desktop client in standalone builds."""
+    """Point Flet at bundled desktop client and set Windows shell identity."""
+    if sys.platform == "win32":
+        os.environ.setdefault("FLET_APP_USER_MODEL_ID", "Factiosi.Tigo")
     flet_view = frozen_flet_view_dir()
     if flet_view is not None:
         os.environ.setdefault("FLET_VIEW_PATH", str(flet_view))
@@ -109,6 +111,8 @@ def configure_frozen_flet_desktop() -> None:
 def frozen_subprocess_env() -> dict[str, str]:
     """Environment for child Tigo.exe processes in standalone builds."""
     env = os.environ.copy()
+    if sys.platform == "win32":
+        env.setdefault("FLET_APP_USER_MODEL_ID", "Factiosi.Tigo")
     flet_view = frozen_flet_view_dir()
     if flet_view is not None:
         env["FLET_VIEW_PATH"] = str(flet_view)

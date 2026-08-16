@@ -10,6 +10,7 @@ from src.core.branding import app_window_icon_path
 from src.core.debug_log import clear, get_persistent_text
 from src.core.fonts import FONT_JETBRAINS_MONO, register_mono_font
 from src.core.paths import APP_NAME
+from src.core.process_label import label_flet_view_process
 from src.core.settings import get_settings
 from src.core.version import __version__
 from src.theme import T, apply_theme, build_flet_theme, build_theme_tokens
@@ -31,6 +32,7 @@ def main(page: ft.Page) -> None:
     apply_theme(settings.theme_mode, settings.portal_hue)
     register_mono_font(page)
     page.title = f"{APP_NAME} — консоль отладки"
+    label_flet_view_process(f"{APP_NAME} debug console")
     page.bgcolor = T.GROUND
     page.theme = build_flet_theme(build_theme_tokens("light", settings.portal_hue))
     page.dark_theme = build_flet_theme(build_theme_tokens("dark", settings.portal_hue))

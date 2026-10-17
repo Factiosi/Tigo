@@ -118,9 +118,13 @@ class TigoDaemon:
             self._bootstrap_done.set()
 
     def _tray_status(self) -> tuple[bool, bool]:
+        from src.kernel.process_probe import is_canonical_winws_running
+
         status = get_runtime_status()
         busy = status.tests_running or status.phase.value in {"starting", "stopping"}
-        return status.running, busy
+        probed, _pid = is_canonical_winws_running()
+        running = status.running or probed
+        return running, busy
 
     def _tray_start(self, request: dict | None = None) -> tuple[bool, str]:
         if not self._bootstrap_done.is_set():

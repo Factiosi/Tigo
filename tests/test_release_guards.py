@@ -65,6 +65,22 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(AppSettings.load(path), AppSettings())
 
 
+class SyncProbeTests(unittest.TestCase):
+    def test_sync_probe_during_tests_marks_running_winws(self) -> None:
+        from src.kernel import runtime_state
+
+        runtime_state.mark_stopped()
+        runtime_state.set_tests_running(True)
+        try:
+            runtime_state.sync_probe(True, 4242, strategy_name="General")
+            status = runtime_state.get_status()
+            self.assertTrue(status.running)
+            self.assertEqual(status.pid, 4242)
+        finally:
+            runtime_state.set_tests_running(False)
+            runtime_state.mark_stopped()
+
+
 class ProtocolTests(unittest.TestCase):
     def test_test_state_round_trip(self) -> None:
         original = DaemonStatus(True, "running", "General", "", 42, tests_running=True)

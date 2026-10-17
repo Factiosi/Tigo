@@ -120,7 +120,7 @@ def sync_probe(running: bool, pid: int | None, *, strategy_name: str | None = No
     """Update from background process monitor without clobbering starting/stopping."""
     global _phase, _pid, _strategy_name
     with _lock:
-        if _tests_running and _phase == RuntimePhase.IDLE:
+        if _tests_running and _phase == RuntimePhase.IDLE and not running:
             return
         if _phase in {RuntimePhase.STARTING, RuntimePhase.STOPPING}:
             return

@@ -1,0 +1,52 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+tools/node_modules/
+
+# IDE / agent (local only, not in public repo)
+.vscode/
+.idea/
+.cursor/
+docs/AGENTS-UI-SELECT.md
+docs/AUTOMATION.md
+docs/CHANGELOG.md
+scripts/tigo_mcp.py
+tests/test_mcp_server.py
+requirements-dev.txt
+
+# dev-only scripts
+scripts/measure_resources.ps1
+
+# frozen release artifact (built once locally, never committed)
+scripts/release_assets/TigoUpdate.exe
+
+# OS / logs
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+
+# icon build intermediates
+assets/icons/**/_ico-*.png
+assets/icons/**/_test_*.png
+
+# Nuitka diagnostics/cache
+*.nuitka-*
+nuitka-crash-report.xml
+
+# test result artifacts
+**/test results/
+
+# winws runtime (installed next to the program, not in git)
+/bin/
+/lists/
+/utils/
+/runtime-version.txt

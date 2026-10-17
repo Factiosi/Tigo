@@ -41,6 +41,7 @@ class TrayController:
         self._poll_thread: threading.Thread | None = None
         self._poll_stop = threading.Event()
         self._last_running: bool | None = None
+        self._last_busy: bool | None = None
         self._menu_icons = self._load_menu_icons()
 
     @staticmethod
@@ -108,14 +109,16 @@ class TrayController:
             icon = self._icon
             if icon is None:
                 continue
-            running, _busy = self._status_provider()
-            if running == self._last_running:
+            running, busy = self._status_provider()
+            if running == self._last_running and busy == self._last_busy:
                 continue
             self._last_running = running
+            self._last_busy = busy
             try:
                 icon.icon = load_tray_icon(running=running)
             except Exception as exc:  # noqa: BLE001
                 debug("daemon", f"tray icon update: {exc}", level="error")
+            self._refresh_menu()
 
     def _refresh_menu(self) -> None:
         if self._icon:

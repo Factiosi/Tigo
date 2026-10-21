@@ -15,6 +15,7 @@ import socket
 import ssl
 import threading
 import time
+import urllib.error
 import urllib.request
 from ctypes import wintypes
 from dataclasses import dataclass, field
@@ -159,6 +160,10 @@ class Worker:
 
 
 def _reason(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"Сервер обновлений ответил {exc.code}"
+    if isinstance(exc, urllib.error.URLError):
+        return f"Нет связи с сервером обновлений: {exc.reason}"
     text = str(exc).strip() or type(exc).__name__
     return text[0].upper() + text[1:]
 

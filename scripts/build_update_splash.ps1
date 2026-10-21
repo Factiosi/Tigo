@@ -33,6 +33,7 @@ $splashArgs = @(
     "--include-module=src.ui.theme.umbrae",
     "--include-data-files=$(Join-Path $Repo 'assets\fonts\Inter.ttf')=Inter.ttf",
     "--include-data-files=$(Join-Path $Repo 'assets\icons\mark-dark.png')=mark-dark.png",
+    "--include-data-files=$icon=app.ico",
     "--nofollow-import-to=tkinter",
     "--nofollow-import-to=unittest",
     "--nofollow-import-to=test",

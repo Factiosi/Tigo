@@ -25,7 +25,6 @@ _gdi32 = ctypes.WinDLL("gdi32")
 _kernel32 = ctypes.WinDLL("kernel32")
 _dwmapi = ctypes.WinDLL("dwmapi")
 _gdip = ctypes.WinDLL("gdiplus")
-_shell32 = ctypes.WinDLL("shell32")
 
 # Окно в логических пикселях: шкала DPI применяется при рисовании.
 _W, _H = 440, 252
@@ -142,8 +141,8 @@ _gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
 _gdi32.DeleteDC.argtypes = [wintypes.HDC]
 _gdi32.BitBlt.argtypes = [wintypes.HDC] + [ctypes.c_int] * 4 + [wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD]
 _kernel32.GetModuleHandleW.restype = wintypes.HMODULE
-_shell32.ExtractIconW.restype = wintypes.HICON
-_shell32.ExtractIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT]
+_user32.LoadImageW.restype = wintypes.HANDLE
+_user32.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int, wintypes.UINT]
 
 for _name, _args in {
     "GdiplusStartup": [ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(_StartupInput), _P],
@@ -473,10 +472,7 @@ class UpdateWindow:
         if not self.hwnd:
             raise OSError(f"CreateWindowExW: {ctypes.get_last_error()}")
         self._style_frame()
-        icon = _shell32.ExtractIconW(instance, sys.executable, 0)
-        if icon and icon != 1:
-            _user32.SendMessageW(self.hwnd, _WM_SETICON, 0, icon)
-            _user32.SendMessageW(self.hwnd, _WM_SETICON, 1, icon)
+        self._set_icon()
         _user32.ShowWindow(self.hwnd, 5)
         _user32.SetForegroundWindow(self.hwnd)
         _user32.SetTimer(self.hwnd, 1, _FRAME_MS, None)
@@ -486,6 +482,18 @@ class UpdateWindow:
         while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             _user32.TranslateMessage(ctypes.byref(msg))
             _user32.DispatchMessageW(ctypes.byref(msg))
+
+    def _set_icon(self) -> None:
+        """Значок рамки и панели задач из app.ico рядом с exe, в обоих размерах для текущего DPI."""
+        ico = _asset("app.ico")
+        if ico is None:
+            return
+        dpi = round(self.scale * 96)
+        for kind, metric in ((0, 49), (1, 11)):  # ICON_SMALL: SM_CXSMICON, ICON_BIG: SM_CXICON
+            size = _user32.GetSystemMetricsForDpi(metric, dpi)
+            icon = _user32.LoadImageW(None, str(ico), 1, size, size, 0x10)  # IMAGE_ICON, LR_LOADFROMFILE
+            if icon:
+                _user32.SendMessageW(self.hwnd, _WM_SETICON, kind, icon)
 
     def _style_frame(self) -> None:
         """Рамка Windows в тёмной теме: заголовок цвета фона, обводка цвета карточки."""

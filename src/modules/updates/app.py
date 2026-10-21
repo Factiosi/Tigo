@@ -39,11 +39,13 @@ class AppUpdate:
     installer_name: str
 
 
-def _version_tuple(value: str) -> tuple[int, int, int]:
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", value.strip(), re.I)
+def _version_tuple(value: str) -> tuple[int, int, int, int]:
+    """«1.5.0» и тестовая «1.5.0-dev». Тестовая сборка младше своего релиза: 1.5.0-dev < 1.5.0."""
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(-dev)?", value.strip(), re.I)
     if not match:
         raise ValueError(f"Некорректная версия: {value}")
-    return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+    major, minor, patch, dev = match.groups()
+    return int(major), int(minor), int(patch), 0 if dev else 1
 
 
 def fetch_app_update() -> AppUpdate | None:

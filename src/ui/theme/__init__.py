@@ -1,11 +1,16 @@
-"""Схема Tigo: поверхности Leo и акцент категории rete. Второй палитры нет."""
+"""Схема Tigo на Factiosi Umbrae. Числа — из umbrae.py (копия сборки Factiosi), второй палитры нет."""
 
 from __future__ import annotations
 
+import re
 from typing import Literal, TypedDict
 
+from src.ui.theme.umbrae import DARK as _UMBRAE_DARK
+from src.ui.theme.umbrae import LIGHT as _UMBRAE_LIGHT
+from src.ui.theme.umbrae import px
+
 ThemeMode = Literal["dark", "light"]
-# Поле settings.json со старых сборок. На экран не влияет: категория приложения — rete.
+# Поле settings.json со старых сборок. На экран не влияет: акцент Factiosi один — фиолетовый.
 PortalHue = Literal[
     "purple",
     "green",
@@ -17,53 +22,18 @@ PortalHue = Literal[
     "mono",
 ]
 
-# Итог scripts/build_theme.mjs, коммит Leo 7cacfef7134a605e35de9bb95db4e85540b941bc.
-_SCHEME = {
-    "light": {
-        "page": "#fafafb",
-        "card": "#ffffff",
-        "raised": "#ffffff",
-        "sunken": "#e4e4e5",
-        "text": "#1c1c1d",
-        "text_secondary": "#464649",
-        "text_tertiary": "#727277",
-        "line": "#e4e4e5",
-        "line_strong": "#bcbcbd",
-        "button": "#434fcf",
-        "on_button": "#ffffff",
-        "success": "#1d703b",
-        "warning": "#745c00",
-        "error": "#b10b15",
-        "highlight": "#f2f2f3",
-        "selected": "#eef2ff",
-    },
-    "dark": {
-        "page": "#121213",
-        "card": "#19191b",
-        "raised": "#141415",
-        "sunken": "#0f0f0f",
-        "text": "#e4e4e5",
-        "text_secondary": "#c7c7c9",
-        "text_tertiary": "#929296",
-        "line": "#303032",
-        "line_strong": "#5e5e62",
-        "button": "#bcc6f3",
-        "on_button": "#212848",
-        "success": "#45ca75",
-        "warning": "#d4ab1e",
-        "error": "#fc8276",
-        "highlight": "#252527",
-        "selected": "#1a1f38",
-    },
-}
+_UMBRAE = {"dark": _UMBRAE_DARK, "light": _UMBRAE_LIGHT}
+_RGB = re.compile(r"rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)\s*(?:[/,]\s*([\d.]+))?\s*\)")
 
-_RETE = {
-    "light": {"accent": "#224470", "hover": "#20416c", "active": "#1f3e68"},
-    "dark": {"accent": "#7badfa", "hover": "#a9c8f9", "active": "#78a8f5"},
-}
 
-# Кольцо фокуса Leo: --leo-effect-focus-state, primitive-primary-50.
-_FOCUS = "#5b67e8"
+def flet_color(value: str) -> str:
+    """Цвет токена (#rrggbb или rgb(r g b / a)) -> #AARRGGBB для Flet."""
+    match = _RGB.fullmatch(value.strip())
+    if not match:
+        return value
+    red, green, blue = (int(match.group(i)) for i in (1, 2, 3))
+    alpha = float(match.group(4)) if match.group(4) else 1.0
+    return f"#{round(alpha * 255):02x}{red:02x}{green:02x}{blue:02x}"
 
 
 def argb(hex_color: str, alpha: int) -> str:
@@ -103,36 +73,47 @@ class PortalPalette(TypedDict):
     success: str
     warning: str
     error: str
+    success_bg: str
+    warning_bg: str
+    error_bg: str
+    rail_active_bg: str
+    rail_active_edge: str
+    rail_sheen: str
 
 
 def get_palette(*, mode: ThemeMode = "dark", hue: str | None = None) -> PortalPalette:
-    del hue  # категория Tigo зафиксирована: rete
-    scheme = _SCHEME[mode]
-    rete = _RETE[mode]
+    del hue  # акцент дома один — фиолетовый Umbrae
+    u = _UMBRAE[mode]
     return {
-        "id": f"rete-{mode}",
+        "id": f"umbrae-{mode}",
         "mode": mode,
-        "ground": scheme["page"],
-        "surface": scheme["card"],
-        "elevated": scheme["raised"],
-        "overlay": scheme["card"],
-        "sunken": scheme["sunken"],
-        "accent": rete["accent"],
-        "accent_dim": rete["active"],
-        "accent_soft": argb(rete["accent"], 0x1F),
-        "overlay_hover": scheme["highlight"],
-        "selected": scheme["selected"],
-        "text": scheme["text"],
-        "text_muted": scheme["text_secondary"],
-        "text_faint": scheme["text_tertiary"],
-        "border": scheme["line"],
-        "border_strong": scheme["line_strong"],
-        "button": scheme["button"],
-        "on_button": scheme["on_button"],
-        "focus": _FOCUS,
-        "success": scheme["success"],
-        "warning": scheme["warning"],
-        "error": scheme["error"],
+        "ground": u["surface-page"],
+        "surface": u["surface-card"],
+        "elevated": u["surface-raised"],
+        "overlay": u["surface-card"],
+        "sunken": u["surface-sunken"],
+        "accent": u["action-primary"],
+        "accent_dim": u["action-primary-active"],
+        "accent_soft": argb(u["action-primary"], 0x1F),
+        "overlay_hover": u["action-secondary-hover"],
+        "selected": u["interactive-selected-bg"],
+        "text": u["text-primary"],
+        "text_muted": u["text-secondary"],
+        "text_faint": u["text-tertiary"],
+        "border": u["border-default"],
+        "border_strong": u["border-strong"],
+        "button": u["action-primary"],
+        "on_button": u["text-on-action"],
+        "focus": u["border-focus"],
+        "success": u["feedback-success-text"],
+        "warning": u["feedback-warning-text"],
+        "error": u["feedback-error-text"],
+        "success_bg": u["feedback-success-bg"],
+        "warning_bg": u["feedback-warning-bg"],
+        "error_bg": u["feedback-error-bg"],
+        "rail_active_bg": flet_color(u["umbrae-rail-active-bg"]),
+        "rail_active_edge": flet_color(u["umbrae-rail-active-edge"]),
+        "rail_sheen": flet_color(u["umbrae-rail-sheen"]),
     }
 
 
@@ -143,7 +124,7 @@ class ThemeTokens:
     def __init__(self, palette: PortalPalette) -> None:
         self._p = palette
         self.mode = palette["mode"]
-        self.hue = "rete"
+        self.hue = "umbrae"
 
         self.GROUND = palette["ground"]
         self.SURFACE = palette["surface"]
@@ -171,17 +152,21 @@ class ThemeTokens:
         self.PURPLE_SOFT = self.ACCENT_SOFT
 
         self.STATUS_ACTIVE = palette["success"]
-        self.STATUS_ACTIVE_BG = palette["success"]
+        self.STATUS_ACTIVE_BG = palette["success_bg"]
         self.STATUS_CONNECTING = palette["button"]
-        self.STATUS_CONNECTING_BG = palette["button"]
+        self.STATUS_CONNECTING_BG = palette["selected"]
         self.STATUS_EXPIRING = palette["warning"]
-        self.STATUS_EXPIRING_BG = palette["warning"]
+        self.STATUS_EXPIRING_BG = palette["warning_bg"]
         self.STATUS_ERROR = palette["error"]
-        self.STATUS_ERROR_BG = palette["error"]
-        self.STATUS_OFFLINE = palette["border_strong"]
-        self.STATUS_OFFLINE_BG = palette["border_strong"]
-        # Выключенная дорожка переключателя Leo: outline-variant.
-        self.TRACK_OFF = "#464649" if self.mode == "dark" else "#c9c9ca"
+        self.STATUS_ERROR_BG = palette["error_bg"]
+        self.STATUS_OFFLINE = palette["text_faint"]
+        self.STATUS_OFFLINE_BG = palette["sunken"]
+        self.TRACK_OFF = palette["border_strong"]
+        # Рельс Umbrae: активный пункт — плашка с обводкой, по ней раз в период проходит блик.
+        self.RAIL_ACTIVE_BG = palette["rail_active_bg"]
+        self.RAIL_ACTIVE_EDGE = palette["rail_active_edge"]
+        self.RAIL_SHEEN = palette["rail_sheen"]
+        self.RAIL_SHEEN_PERIOD = px("umbrae-rail-sheen-period")
         self.HOVER_SCRIM = "#29000000" if self.mode == "dark" else "#29ffffff"
         self.PRESS_SCRIM = "#47000000" if self.mode == "dark" else "#47ffffff"
         self.OUTLINE_HOVER = argb(palette["button"], 0x1A)
@@ -199,15 +184,22 @@ class ThemeTokens:
         self.SPACE_FIELD = 16
         self.SPACE_SECTION = 16
         self.SPACE_ROW = 12
-        self.FIELD_HEIGHT = 46
-        self.BUTTON_HEIGHT = 44
-        self.CONTROL_SLOT = 46
-        self.RADIUS = 8
-        self.RADIUS_L = 12
-        self.RADIUS_PILL = 1000
+        self.FIELD_HEIGHT = px("size-control-lg")
+        self.BUTTON_HEIGHT = px("size-control-lg")
+        self.CONTROL_SLOT = px("size-control-lg")
+        # Одна роль — один радиус (Factiosi Umbrae): контрол и карточка 6, панель и меню 8, бейдж 4.
+        self.RADIUS = px("radius-button")
+        self.RADIUS_L = px("radius-panel")
+        # Пилюль в Umbrae нет: бывшие капсулы кнопок — обычный радиус контрола.
+        self.RADIUS_PILL = px("radius-button")
+        self.RADIUS_BADGE = px("radius-badge")
+        self.RADIUS_TOGGLE = px("radius-toggle")
+        self.RADIUS_CHECKBOX = px("radius-checkbox")
         self.SECTION_PAD = 12
 
-        self.SIDEBAR_WIDTH = 279
+        self.SIDEBAR_WIDTH = px("size-layout-sidebar")
+        self.RAIL_EDGE = px("space-rail-edge")
+        self.RAIL_ITEM_GAP = px("space-rail-item")
 
 
 def build_theme_tokens(mode: ThemeMode = DEFAULT_THEME_MODE, hue: str | None = None) -> ThemeTokens:

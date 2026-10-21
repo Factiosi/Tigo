@@ -3,13 +3,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="chrome" gradientUnits="userSpaceOnUse" x1="0" y1="50" x2="0" y2="974">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.3" stop-color="#dcd4e2"/>
-      <stop offset="0.47" stop-color="#9a8ca6"/>
-      <stop offset="0.52" stop-color="#2e2735"/>
-      <stop offset="0.6" stop-color="#7b6c89"/>
-      <stop offset="0.82" stop-color="#f8f5fa"/>
-      <stop offset="1" stop-color="#a495b2"/>
+      <stop offset="0" stop-color="#c7f6de"/>
+      <stop offset="0.3" stop-color="#a7d0bb"/>
+      <stop offset="0.47" stop-color="#718c7e"/>
+      <stop offset="0.52" stop-color="#202824"/>
+      <stop offset="0.6" stop-color="#586d62"/>
+      <stop offset="0.82" stop-color="#c0eed6"/>
+      <stop offset="1" stop-color="#789586"/>
     </linearGradient>
     <filter id="neon" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="26"/>

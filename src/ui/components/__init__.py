@@ -8,7 +8,7 @@ from typing import Callable
 
 import flet as ft
 
-from src.ui.theme import T, ink
+from src.ui.theme import T
 
 ANIM = ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
 ANIM_FAST = ft.Animation(100, ft.AnimationCurve.EASE_OUT)
@@ -264,7 +264,7 @@ def ui_text(
 
 
 class LeoSwitch:
-    """Переключатель Leo: 52×32, бегунок 24, ход 20px за 100 мс."""
+    """Переключатель Umbrae: 52×32, бегунок 24, ход 20px за 100 мс, радиус переключателя из шкалы."""
 
     def __init__(self, *, label: str, value: bool, on_change: Callable[[bool], None]) -> None:
         self.value = value
@@ -272,7 +272,7 @@ class LeoSwitch:
         self.thumb = ft.Container(
             width=24,
             height=24,
-            border_radius=12,
+            border_radius=max(T.RADIUS_TOGGLE - 2, 1),
             left=24 if value else 4,
             top=4,
             animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
@@ -280,7 +280,7 @@ class LeoSwitch:
         self.track = ft.Container(
             width=52,
             height=32,
-            border_radius=16,
+            border_radius=T.RADIUS_TOGGLE,
             content=ft.Stack([self.thumb], width=52, height=32),
             on_click=self._toggle,
         )
@@ -298,7 +298,7 @@ class LeoSwitch:
 
     def paint(self) -> None:
         self.track.bgcolor = T.BUTTON if self.value else T.TRACK_OFF
-        self.thumb.bgcolor = T.ON_BUTTON if self.value else "#ffffff"
+        self.thumb.bgcolor = T.ON_BUTTON if self.value else T.TEXT
         self.thumb.left = 24 if self.value else 4
 
     def set_value(self, value: bool) -> None:
@@ -313,8 +313,9 @@ class LeoSwitch:
 
 
 def quiet_checkbox(**kwargs) -> ft.Checkbox:
-    """Чекбокс без материального круга. У Leo при наведении меняется сам знак, не пятно вокруг."""
+    """Чекбокс без материального круга: при наведении меняется сам знак, не пятно вокруг. Радиус — из шкалы Umbrae."""
     kwargs.setdefault("hover_color", "#00000000")
+    kwargs.setdefault("shape", ft.RoundedRectangleBorder(radius=T.RADIUS_CHECKBOX))
     kwargs.setdefault("splash_radius", 0)
     kwargs.setdefault("active_color", T.BUTTON)
     kwargs.setdefault("check_color", T.ON_BUTTON)
@@ -322,15 +323,15 @@ def quiet_checkbox(**kwargs) -> ft.Checkbox:
 
 
 def status_pill(status: str, label: str | None = None, *, dense: bool = False) -> ft.Container:
+    """Бейдж статуса Umbrae: фон и текст одного статуса, радиус бейджа, без пилюли."""
     colors = {
-        "active": (T.STATUS_ACTIVE, "Активно"),
-        "connecting": (T.BUTTON, "Подключение"),
-        "expiring": (T.STATUS_EXPIRING, "Предупреждение"),
-        "error": (T.STATUS_ERROR, "Ошибка"),
-        "offline": (T.BORDER_STRONG, "Отключено"),
+        "active": (T.STATUS_ACTIVE_BG, T.STATUS_ACTIVE, "Активно"),
+        "connecting": (T.STATUS_CONNECTING_BG, T.STATUS_CONNECTING, "Подключение"),
+        "expiring": (T.STATUS_EXPIRING_BG, T.STATUS_EXPIRING, "Предупреждение"),
+        "error": (T.STATUS_ERROR_BG, T.STATUS_ERROR, "Ошибка"),
+        "offline": (T.STATUS_OFFLINE_BG, T.STATUS_OFFLINE, "Отключено"),
     }
-    bg, default = colors.get(status, colors["offline"])
-    fg = ink(bg)
+    bg, fg, default = colors.get(status, colors["offline"])
     dot_size = 5 if dense else 6
     text_size = 11 if dense else 12
     padding = (
@@ -341,7 +342,7 @@ def status_pill(status: str, label: str | None = None, *, dense: bool = False) -
     return ft.Container(
         content=ft.Row(
             [
-                ft.Container(width=dot_size, height=dot_size, bgcolor=fg, border_radius=99),
+                ft.Container(width=dot_size, height=dot_size, bgcolor=fg, border_radius=dot_size / 2),
                 ui_text(label or default, size=text_size, color=fg, weight=ft.FontWeight.W_500),
             ],
             spacing=4 if dense else 6,
@@ -349,7 +350,7 @@ def status_pill(status: str, label: str | None = None, *, dense: bool = False) -
         ),
         bgcolor=bg,
         padding=padding,
-        border_radius=99,
+        border_radius=T.RADIUS_BADGE,
     )
 
 

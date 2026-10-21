@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import flet as ft
 
-from src.ui.theme import T, ink
+from src.ui.theme import T
 from src.ui.components import ui_text
 
 _active_toast: ft.Container | None = None
@@ -25,14 +25,14 @@ TOAST_ANIM_EXIT = ft.Animation(200, ft.AnimationCurve.EASE_IN)
 TOAST_ANIM_DISMISS = ft.Animation(200, ft.AnimationCurve.EASE_OUT)
 
 def _kind_style(kind: str) -> tuple[str, str]:
-    backgrounds = {
-        "info": T.BUTTON,
-        "success": T.STATUS_ACTIVE,
-        "warning": T.STATUS_EXPIRING,
-        "error": T.STATUS_ERROR,
+    """Тост Umbrae: фон статуса и текст того же статуса (цвет, фон)."""
+    styles = {
+        "info": (T.BUTTON, T.SELECTED),
+        "success": (T.STATUS_ACTIVE, T.STATUS_ACTIVE_BG),
+        "warning": (T.STATUS_EXPIRING, T.STATUS_EXPIRING_BG),
+        "error": (T.STATUS_ERROR, T.STATUS_ERROR_BG),
     }
-    bg = backgrounds.get(kind, backgrounds["info"])
-    return ink(bg), bg
+    return styles.get(kind, styles["info"])
 
 
 def _toast_left(_page: ft.Page) -> float:

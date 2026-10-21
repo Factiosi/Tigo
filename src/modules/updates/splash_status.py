@@ -1,4 +1,4 @@
-"""Shared update progress state for TigoUpdate.exe splash window."""
+"""Файл, которым новая Tigo после обновления говорит TigoUpdate «я запущена»."""
 
 from __future__ import annotations
 

@@ -204,22 +204,27 @@ class TigoApp:
             return
         page._tigo_rail_sheen_started = True  # type: ignore[attr-defined]
 
+        def place(left: float, animation: ft.Animation | None) -> None:
+            app = getattr(page, "_tigo_rail_app", None)
+            sheen = app._rail_sheen if app else None
+            if sheen is None or not sheen.page:
+                return
+            sheen.animate_position = animation
+            sheen.left = left
+            try:
+                sheen.update()
+            except Exception:
+                pass
+
+        # Проход анимирует сам Flutter с частотой экрана; Python лишь возвращает блик на старт.
         async def loop() -> None:
-            steps = 40
             while True:
                 period = T.RAIL_SHEEN_PERIOD
                 passage = period * 0.15
-                for step in range(steps + 1):
-                    app = getattr(page, "_tigo_rail_app", None)
-                    sheen = app._rail_sheen if app else None
-                    if sheen is not None and sheen.page:
-                        sheen.left = -96 + step / steps * (T.SIDEBAR_WIDTH + 96)
-                        try:
-                            sheen.update()
-                        except Exception:
-                            pass
-                    await asyncio.sleep(passage / steps)
-                await asyncio.sleep(period - passage)
+                place(-96, None)
+                await asyncio.sleep(0.1)
+                place(T.SIDEBAR_WIDTH, ft.Animation(round(passage * 1000), ft.AnimationCurve.EASE_IN_OUT))
+                await asyncio.sleep(period - 0.1)
 
         page.run_task(loop)
 

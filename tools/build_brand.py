@@ -27,6 +27,36 @@ CHROME_STOPS = (0, 0.3, 0.47, 0.52, 0.6, 0.82, 1)
 FLARE_PATH = "M0,-150 L18,-18 L255,0 L18,18 L0,150 L-18,18 L-255,0 L-18,-18 Z"
 
 
+def _rgb(value: str) -> tuple[int, int, int]:
+    return tuple(int(value[i : i + 2], 16) for i in (1, 3, 5))  # type: ignore[return-value]
+
+
+def _hex(rgb) -> str:
+    return "#" + "".join(f"{max(0, min(255, round(c))):02x}" for c in rgb)
+
+
+def grey(value: str) -> str:
+    """Тот же металл без оттенка: яркость по Rec. 709."""
+    r, g, b = _rgb(value)
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return _hex((y, y, y))
+
+
+def tint(value: str, toward: str, amount: float) -> str:
+    """Серый металл с отливом: смесь яркости и цвета по мере светлоты, тени остаются тенями."""
+    y = _rgb(grey(value))[0]
+    t = _rgb(toward)
+    return _hex(y + (c * y / 255 - y) * amount for c in t)
+
+
+def chrome_scheme(scheme: dict[str, str], recolor) -> dict[str, str]:
+    out = dict(scheme)
+    for i in range(len(CHROME_STOPS)):
+        key = f"umbrae-chrome-{i}"
+        out[key] = recolor(scheme[key])
+    return out
+
+
 def glyphs() -> str:
     svg = SOURCE.read_text(encoding="utf-8")
     return "\n".join(re.findall(r"\s*<path[^>]*/>", svg))
@@ -104,13 +134,16 @@ def main() -> None:
             DARK, glow=DARK["umbrae-neon-glow"], glow_opacity=dark_glow, core=DARK["umbrae-neon-core"],
             glow_width=40, core_width=12, glow_blur=18, flare=True, comment="Tigo: знак окна обновления.",
         ),
-        # Трей мелкий: ореол шире, сердцевина толще, без звезды. Работа — неон цвета успеха.
+        # Трей мелкий: ореол шире, сердцевина толще, без звезды.
+        # Покой — чёрно-белый металл и белёсый неон; работа — металл с зелёным отливом и неон цвета успеха.
         "tray-idle.svg": mark_svg(
-            DARK, glow=DARK["umbrae-neon-glow"], glow_opacity=0.9, core=DARK["umbrae-neon-core"],
-            glow_width=70, core_width=26, glow_blur=26, flare=False, comment="Tigo: трей, покой.",
+            chrome_scheme(DARK, grey), glow=grey(DARK["umbrae-neon-glow"]), glow_opacity=0.9,
+            core=grey(DARK["umbrae-neon-core"]), glow_width=70, core_width=26, glow_blur=26,
+            flare=False, comment="Tigo: трей, покой.",
         ),
         "tray-active.svg": mark_svg(
-            DARK, glow=DARK["feedback-success-text"], glow_opacity=0.95,
+            chrome_scheme(DARK, lambda c: tint(c, DARK["feedback-success-text"], 0.35)),
+            glow=DARK["feedback-success-text"], glow_opacity=0.95,
             core=DARK["feedback-success-text"], glow_width=70, core_width=26, glow_blur=26,
             flare=False, comment="Tigo: трей, работа.",
         ),

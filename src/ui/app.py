@@ -7,7 +7,7 @@ import threading
 
 import flet as ft
 
-from src.core.branding import app_window_icon_path, icons_dir
+from src.core.branding import app_window_icon_path
 from src.core.process_label import schedule_flet_process_label
 from src.core.events import subscribe, unsubscribe
 from src.core.fonts import register_mono_font
@@ -286,24 +286,6 @@ class TigoApp:
             on_click=on_click,
         )
 
-    def _wordmark(self) -> ft.Control:
-        """Вордмарк Tigo: знак в хроме с неоном, тонкий разделитель и имя продукта — спокойное."""
-        mark = icons_dir() / ("mark-dark.png" if T.mode == "dark" else "mark-light.png")
-        parts: list[ft.Control] = []
-        if mark.exists():
-            parts.append(ft.Image(src=str(mark), width=44, height=44))
-        parts.extend(
-            [
-                ft.Container(width=1, height=30, bgcolor=T.BORDER_STRONG),
-                ui_text("TIGO", size=26, weight=ft.FontWeight.W_600, family=T.FONT_DISPLAY, color=T.TEXT),
-            ]
-        )
-        return ft.Container(
-            content=ft.Row(parts, spacing=12, alignment=ft.MainAxisAlignment.CENTER, tight=True),
-            alignment=ft.Alignment.CENTER,
-            padding=ft.Padding.only(top=4, bottom=12),
-        )
-
     def _build_sidebar(self) -> ft.Container:
         self._rail_sheen = None
         nav = build_nav_items()
@@ -324,7 +306,6 @@ class TigoApp:
             border=ft.Border.only(right=ft.BorderSide(1, T.BORDER)),
             content=ft.Column(
                 [
-                    self._wordmark(),
                     ft.Column(self._nav_controls, spacing=T.RAIL_ITEM_GAP, tight=True),
                     ft.Container(expand=True),
                     settings_btn,

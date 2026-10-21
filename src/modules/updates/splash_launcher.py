@@ -19,7 +19,7 @@ from src.core.paths import APP_NAME, is_packaged_app, program_root, temp_dir
 from src.modules.updates.splash_status import clear_update_status, status_path, write_update_status
 
 # Растёт при каждом изменении TigoUpdate, иначе Tigo продолжит запускать старую копию.
-UPDATER_REVISION = 2
+UPDATER_REVISION = 3
 _EXE = "TigoUpdate.exe"
 
 

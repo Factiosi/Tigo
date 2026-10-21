@@ -1,7 +1,7 @@
 """Знаки Tigo в материале Factiosi Umbrae: хром, неон, звёздный блик.
 
 Вход: белый силуэт assets/brand/sources/tigo-simple.svg и токены src/ui/theme/umbrae.py.
-Выход: SVG в assets/icons/ (окно, трей, знак рельса). Растры из них делает generate_icons.mjs.
+Выход: SVG в assets/icons/ (окно, трей, знак окна обновления). Растры из них делает generate_icons.mjs.
 Запуск из корня: python tools/build_brand.py, затем python tools/generate_icons.py
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.ui.theme.umbrae import DARK, LIGHT  # noqa: E402
+from src.ui.theme.umbrae import DARK  # noqa: E402
 
 SOURCE = ROOT / "assets" / "brand" / "sources" / "tigo-simple.svg"
 ICONS = ROOT / "assets" / "icons"
@@ -99,15 +99,10 @@ def main() -> None:
             DARK, glow=DARK["umbrae-neon-glow"], glow_opacity=dark_glow, core=DARK["umbrae-neon-core"],
             glow_width=40, core_width=12, glow_blur=18, flare=True, comment="Tigo: значок окна.",
         ),
-        # Рельс в Nox и Lux: тот же знак, в Lux — воронёная сталь.
+        # Окно обновления TigoUpdate: тот же знак на почти чёрном фоне.
         "mark-dark.svg": mark_svg(
             DARK, glow=DARK["umbrae-neon-glow"], glow_opacity=dark_glow, core=DARK["umbrae-neon-core"],
-            glow_width=40, core_width=12, glow_blur=18, flare=True, comment="Tigo: знак рельса, Nox.",
-        ),
-        "mark-light.svg": mark_svg(
-            LIGHT, glow=LIGHT["umbrae-neon-glow"], glow_opacity=float(LIGHT["umbrae-neon-glow-opacity"]),
-            core=LIGHT["umbrae-neon-core"], glow_width=40, core_width=12, glow_blur=18, flare=True,
-            comment="Tigo: знак рельса, Lux.",
+            glow_width=40, core_width=12, glow_blur=18, flare=True, comment="Tigo: знак окна обновления.",
         ),
         # Трей мелкий: ореол шире, сердцевина толще, без звезды. Работа — неон цвета успеха.
         "tray-idle.svg": mark_svg(

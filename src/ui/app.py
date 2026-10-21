@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 
 import flet as ft
 
-from src.core.branding import app_window_icon_path
+from src.core.branding import app_window_icon_path, icons_dir
 from src.core.process_label import schedule_flet_process_label
 from src.core.events import subscribe, unsubscribe
 from src.core.fonts import register_mono_font
@@ -69,6 +70,7 @@ class TigoApp:
         self._strategies_page: StrategiesPage | None = None
         self._strategies_changed_handler = self._on_strategies_changed
         self._app_update_started = False
+        self._rail_sheen: ft.Container | None = None
 
     def _on_strategies_changed(self) -> None:
         if not self.page:
@@ -105,6 +107,7 @@ class TigoApp:
         subscribe("strategies_changed", self._strategies_changed_handler)
         self._navigate(self._route)
         self._start_app_update_check()
+        self._start_rail_sheen()
 
     def _start_app_update_check(self) -> None:
         settings = get_settings()
@@ -193,44 +196,116 @@ class TigoApp:
 
         self.page.run_task(close_window)
 
+    def _start_rail_sheen(self) -> None:
+        """Один таймер блика на окно. Смена пункта его не перезапускает: блик идёт по своим часам."""
+        page = self.page
+        page._tigo_rail_app = self  # type: ignore[attr-defined]
+        if getattr(page, "_tigo_rail_sheen_started", False):
+            return
+        page._tigo_rail_sheen_started = True  # type: ignore[attr-defined]
+
+        async def loop() -> None:
+            steps = 40
+            while True:
+                period = T.RAIL_SHEEN_PERIOD
+                passage = period * 0.15
+                for step in range(steps + 1):
+                    app = getattr(page, "_tigo_rail_app", None)
+                    sheen = app._rail_sheen if app else None
+                    if sheen is not None and sheen.page:
+                        sheen.left = -96 + step / steps * (T.SIDEBAR_WIDTH + 96)
+                        try:
+                            sheen.update()
+                        except Exception:
+                            pass
+                    await asyncio.sleep(passage / steps)
+                await asyncio.sleep(period - passage)
+
+        page.run_task(loop)
+
     def _nav_button(self, route: str, label: str, icon, selected_icon) -> ft.Container:
         active = route == self._route
 
         def on_click(_: ft.ControlEvent) -> None:
             self._navigate(route)
 
-        mark = T.BUTTON if active else T.TEXT_MUTED
-        return ft.Container(
-            content=ft.Row(
-                [
-                    ft.Container(
-                        width=4,
-                        height=16,
-                        bgcolor=T.BUTTON if active else "#00000000",
-                        border_radius=3,
-                    ),
-                    ft.Icon(selected_icon if active else icon, color=mark, size=20),
-                    ui_text(
-                        label,
-                        color=T.BUTTON if active else T.TEXT,
-                        weight=ft.FontWeight.W_600 if active else ft.FontWeight.W_400,
-                        family=T.FONT_UI,
-                        expand=True,
-                        no_wrap=True,
-                    ),
-                ],
-                spacing=12,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        color = T.TEXT if active else T.TEXT_FAINT
+        row = ft.Row(
+            [
+                ft.Icon(selected_icon if active else icon, color=color, size=18),
+                ui_text(
+                    label,
+                    color=color,
+                    weight=ft.FontWeight.W_500,
+                    family=T.FONT_UI,
+                    expand=True,
+                    no_wrap=True,
+                ),
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        padding = ft.Padding.symmetric(horizontal=8, vertical=10)
+        if not active:
+
+            def on_hover(e: ft.ControlEvent) -> None:
+                hovered = str(e.data).lower() == "true"
+                e.control.bgcolor = T.SELECTED if hovered else None
+                tone = T.TEXT_MUTED if hovered else T.TEXT_FAINT
+                for part in row.controls:
+                    part.color = tone
+                e.control.update()
+
+            return ft.Container(
+                content=row,
+                border_radius=T.RADIUS,
+                padding=padding,
+                on_click=on_click,
+                on_hover=on_hover,
+            )
+
+        # Активный пункт: кегль тот же, плашка с обводкой по контуру и бегущий блик (docs Factiosi UMBRAE.md).
+        sheen = ft.Container(
+            width=80,
+            top=0,
+            bottom=0,
+            left=-96,
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment.CENTER_LEFT,
+                end=ft.Alignment.CENTER_RIGHT,
+                colors=["#00ffffff", T.RAIL_SHEEN, "#00ffffff"],
             ),
-            bgcolor=T.SELECTED if active else None,
+        )
+        self._rail_sheen = sheen
+        return ft.Container(
+            content=ft.Stack([sheen, ft.Container(content=row, padding=padding)]),
+            bgcolor=T.RAIL_ACTIVE_BG,
+            border=ft.Border.all(1, T.RAIL_ACTIVE_EDGE),
             border_radius=T.RADIUS,
-            padding=ft.Padding.symmetric(horizontal=12, vertical=12),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             on_click=on_click,
-            ink=not active,
-            ink_color=T.OVERLAY_HOVER,
+        )
+
+    def _wordmark(self) -> ft.Control:
+        """Вордмарк Tigo: знак в хроме с неоном, тонкий разделитель и имя продукта — спокойное."""
+        mark = icons_dir() / ("mark-dark.png" if T.mode == "dark" else "mark-light.png")
+        parts: list[ft.Control] = []
+        if mark.exists():
+            parts.append(ft.Image(src=str(mark), width=44, height=44))
+        parts.extend(
+            [
+                ft.Container(width=1, height=30, bgcolor=T.BORDER_STRONG),
+                ui_text("TIGO", size=26, weight=ft.FontWeight.W_600, family=T.FONT_DISPLAY, color=T.TEXT),
+            ]
+        )
+        return ft.Container(
+            content=ft.Row(parts, spacing=12, alignment=ft.MainAxisAlignment.CENTER, tight=True),
+            alignment=ft.Alignment.CENTER,
+            padding=ft.Padding.only(top=4, bottom=12),
         )
 
     def _build_sidebar(self) -> ft.Container:
+        self._rail_sheen = None
         nav = build_nav_items()
         self._nav_controls = [
             self._nav_button(route, label, icon, selected_icon)
@@ -245,13 +320,16 @@ class TigoApp:
         return ft.Container(
             width=T.SIDEBAR_WIDTH,
             bgcolor=T.GROUND,
-            padding=ft.Padding.only(left=12, right=12, top=16, bottom=16),
+            padding=T.RAIL_EDGE,
+            border=ft.Border.only(right=ft.BorderSide(1, T.BORDER)),
             content=ft.Column(
                 [
-                    ft.Column(self._nav_controls, spacing=4, tight=True),
+                    self._wordmark(),
+                    ft.Column(self._nav_controls, spacing=T.RAIL_ITEM_GAP, tight=True),
                     ft.Container(expand=True),
                     settings_btn,
                 ],
+                spacing=T.RAIL_ITEM_GAP,
                 expand=True,
             ),
         )

@@ -26,7 +26,7 @@ requirements-dev.txt
 scripts/measure_resources.ps1
 
 # frozen release artifact (built once locally, never committed)
-scripts/release_assets/TigoUpdate.exe
+scripts/release_assets/
 
 # OS / logs
 Thumbs.db

@@ -61,8 +61,29 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Tigo Autostart"" /F";
 [UninstallDelete]
 ; Runtime and updates downloaded after installation are not tracked by Inno Setup.
 Type: filesandordirs; Name: "{app}"
+; Copy of TigoUpdate that Tigo runs outside Program Files (src/modules/updates/splash_launcher.py).
+Type: filesandordirs; Name: "{localappdata}\Tigo\updater"
 
 [Code]
+var
+  LastProgressStep: Integer;
+
+{ TigoUpdate passes /TIGOPROGRESS=<file> and draws "current max" from it as the install bar. }
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+var
+  ProgressFile: String;
+  Step: Integer;
+begin
+  ProgressFile := ExpandConstant('{param:TIGOPROGRESS|}');
+  if (ProgressFile = '') or (MaxProgress <= 0) then
+    Exit;
+  Step := CurProgress div (MaxProgress div 200 + 1);
+  if Step = LastProgressStep then
+    Exit;
+  LastProgressStep := Step;
+  SaveStringToFile(ProgressFile, IntToStr(CurProgress) + ' ' + IntToStr(MaxProgress), False);
+end;
+
 function ShouldLaunchTigo(): Boolean;
 begin
   Result := (not WizardSilent) or

@@ -104,14 +104,18 @@ foreach ($intermediate in @("run.build", "run.onefile-build")) {
     }
 }
 
-$FrozenSplash = Join-Path $Repo "scripts\release_assets\TigoUpdate.exe"
-if (-not (Test-Path $FrozenSplash)) {
-    throw "Missing scripts\release_assets\TigoUpdate.exe. Build it once: powershell -File scripts\build_update_splash.ps1"
+$UpdaterSource = Join-Path $Repo "scripts\release_assets\TigoUpdate"
+if (-not (Test-Path (Join-Path $UpdaterSource "TigoUpdate.exe"))) {
+    Write-Host "TigoUpdate is not built yet, building..."
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build_update_splash.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "TigoUpdate build failed with exit code $LASTEXITCODE" }
 }
-Copy-Item -Path $FrozenSplash -Destination (Join-Path $OutDir "TigoUpdate.exe") -Force
+$UpdaterDest = Join-Path $OutDir "updater"
+if (Test-Path $UpdaterDest) { Remove-Item -Recurse -Force $UpdaterDest }
+Copy-Item -Path $UpdaterSource -Destination $UpdaterDest -Recurse -Force
 
 Write-Host ""
 Write-Host "Build complete: $OutDir"
 Write-Host "  Tigo.exe"
-Write-Host "  TigoUpdate.exe (frozen artifact from scripts\release_assets\)"
+Write-Host "  updater\TigoUpdate.exe (from scripts\release_assets\TigoUpdate\)"
 Write-Host "  flet_client\flet.exe"

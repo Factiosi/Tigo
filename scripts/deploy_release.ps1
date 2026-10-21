@@ -73,7 +73,7 @@ Invoke-Checked "powershell" @("-ExecutionPolicy", "Bypass", "-File", $BuildScrip
 
 $Required = @(
     (Join-Path $Standalone "Tigo.exe"),
-    (Join-Path $Standalone "TigoUpdate.exe"),
+    (Join-Path $Standalone "updater\TigoUpdate.exe"),
     (Join-Path $Standalone "flet_client\flet.exe"),
     (Join-Path $Standalone "assets\icons\app.ico")
 )

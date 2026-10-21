@@ -48,6 +48,10 @@ def apply_ipset_mode(version: str, mode: IpsetFilterMode) -> None:
             list_file.rename(backup_file)
         list_file.write_text(DUMMY_IP + "\n", encoding="utf-8")
     elif mode == "any" and current != "any":
+        # Лист уходит в резерв, как для «Отключён»: иначе вернуть «Из листа» будет не из чего.
+        if current == "loaded" and list_file.exists():
+            backup_file.unlink(missing_ok=True)
+            list_file.rename(backup_file)
         list_file.write_text("", encoding="utf-8")
     elif mode == "loaded" and current != "loaded":
         if backup_file.exists():
@@ -70,4 +74,14 @@ def sync_ipset_from_disk(version: str) -> IpsetFilterMode:
     settings = get_settings()
     settings.ipset_filter = mode
     save_settings(settings)
+    return mode
+
+
+def keep_ipset_mode(version: str) -> IpsetFilterMode:
+    """После обновления стратегий: новая версия приносит полный лист, выбор пользователя переносим на неё."""
+    mode = get_settings().ipset_filter
+    try:
+        apply_ipset_mode(version, mode)
+    except FileNotFoundError:
+        return sync_ipset_from_disk(version)
     return mode

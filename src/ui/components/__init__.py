@@ -38,8 +38,22 @@ MENU_GAP = 8
 
 
 def _select_menu_item_style(*, selected: bool) -> ft.ButtonStyle:
+    """Выбранный пункт подсвечен так же тускло, как наведённый, и не меняет фон от фокуса:
+    иначе Flutter, уводя фокус на наведённый пункт, зажигает выбранный ярче."""
     hover_bg = T.OVERLAY_HOVER
     text_color = T.MENU_SELECTED if selected else T.TEXT
+    if selected:
+        return ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=MENU_ITEM_RADIUS),
+            padding=ft.Padding.symmetric(horizontal=16, vertical=0),
+            alignment=ft.Alignment(-1, 0),
+            color={ft.ControlState.DEFAULT: text_color},
+            text_style=ft.TextStyle(size=T.FONT_BODY, font_family=T.FONT_FAMILY, weight=ft.FontWeight.W_400),
+            bgcolor={ft.ControlState.DEFAULT: hover_bg},
+            overlay_color={ft.ControlState.DEFAULT: "#00000000"},
+            mouse_cursor=ft.MouseCursor.CLICK,
+            visual_density=ft.VisualDensity.COMPACT,
+        )
     return ft.ButtonStyle(
         shape=ft.RoundedRectangleBorder(radius=MENU_ITEM_RADIUS),
         padding=ft.Padding.symmetric(horizontal=16, vertical=0),
@@ -753,6 +767,17 @@ def make_select(
         if placement is None:
             return
         field_left, field_top, open_upward, menu_height = placement
+        # Меню не выходит за окно: на нехватку места оно становится ниже и прокручивается.
+        content_bottom = _content_bottom(page)
+        if open_upward:
+            room = field_top - MENU_GAP - 4
+        else:
+            room = content_bottom - (field_top + T.FIELD_HEIGHT + MENU_GAP) - 4
+        fitted = min(menu_height, max(float(2 * MENU_ITEM_HEIGHT + MENU_POPUP_VPAD), room))
+        menu_popup.height = fitted
+        menu_col.height = max(MENU_ITEM_HEIGHT, fitted - MENU_POPUP_VPAD)
+        menu_col.scroll = ft.ScrollMode.ADAPTIVE if fitted < menu_height or len(options) > 6 else None
+        menu_height = fitted
         state["anchor_field_top"] = field_top
         state["anchor_field_left"] = field_left
         state["anchor_scroll"] = getattr(page, "_tigo_page_scroll_offset", 0) or 0

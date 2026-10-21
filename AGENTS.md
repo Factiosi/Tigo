@@ -8,7 +8,7 @@
 
 **Tigo** — десктоп GUI (Flet) для управления zapret/winws на Windows. Пользователь выбирает стратегию flowseal, запускает/останавливает winws без видимых консолей, тестирует стратегии, обновляет runtime с GitHub.
 
-> Имя приложения — **Tigo**. Папка репозитория может называться `Z2UI` — историческое именование, не переименовывать без явного запроса.
+> Имя приложения — **Tigo**. 
 
 ## Корень
 
@@ -18,7 +18,8 @@
 | `requirements.txt` | Зависимости запуска |
 | `requirements-build.txt` | Nuitka |
 | `src/` | Весь код |
-| `assets/icons/` | Иконки окна и трея |
+| `assets/icons/` | Иконки окна, трея и знак рельса (собираются из `assets/brand/sources/`) |
+| `assets/brand/sources/` | Белый мастер знака `tigo-simple.svg` |
 | `tools/` | Генератор иконок и инсталлятор |
 | `scripts/` | Сборка, сплэш обновления, релиз, smoke |
 | `docs/` | Сборка и локальные заметки |
@@ -59,7 +60,7 @@ src/
     ├── components/ # контролы без знания экрана
     ├── pages/      # экраны основного окна
     ├── features/   # debug console
-    └── theme/      # переключатели темы
+    └── theme/      # тема на токенах Factiosi Umbrae; umbrae.py — копия, руками не править
 ```
 
 ### Слои и границы
@@ -101,7 +102,7 @@ Kernel **не** парсит стратегии — только принима�
 1. **Модульность** — core + kernel + modules + ui. Новый функционал = новый модуль в `modules/`, логирование через `core.debug_log`.
 2. **Результаты тестов сохраняются по версии Flowseal** — daemon пишет `%APPDATA%\Tigo\cache\test_results.json`, GUI перечитывает cache через IPC polling. Журнал текущего запуска остаётся in-memory.
 3. **Debug console** — отдельный процесс (`run.py --debug-console`), вход в `src/ui/features/debug_console/app.py`, лог через `%APPDATA%\Tigo\debug.log`, TTL 1 час.
-4. **Home page без inline-консоли** — статус через pill + snackbar; детали в debug console.
+4. **Home page без inline-консоли** — статус через бейдж + тост; детали в debug console.
 5. **winws принадлежит только daemon** — GUI не запускает и не завершает процесс напрямую, включая подбор стратегий.
 6. **Automation ограничена** — source daemon разрешает MCP-команды; compiled daemon требует `TIGO_AUTOMATION=1`.
 7. **Runtime обязателен и независим от стратегий** — при отсутствии `bin/winws.exe` daemon скачивает официальный релиз Flowseal независимо от `strategy_source` и настроек автообновления.
@@ -146,3 +147,13 @@ python run.py
 - **Не** оборачивать `scroll_page` во внутренний `Stack` с overlay — ломает layout.
 - Flet **не имеет** `LayerLink` / `CompositedTransformFollower` — идеально плавный scroll+dropdown недостижим без SDK.
 - Закрытие: Escape, фон `scroll_page`, `bind_select_dismiss`, `close_active_select()` при смене вкладки.
+
+## Дизайн: Factiosi Umbrae
+
+Язык — `docs/UMBRAE.md` в соседнем репозитории Factiosi. Здесь его не пересказывают.
+
+- Числа темы (цвета Nox/Lux, радиусы, размеры, периоды блика) — только из `src/ui/theme/umbrae.py`. Это копия `python/umbrae.py` из Factiosi: обновляется `scripts/sync_umbrae.ps1`, руками не правится. `src/ui/theme/__init__.py` раскладывает её в `T.*`.
+- Акцент один — фиолетовый. Пилюль нет: кнопки, поля, карточки, пункт рельса — радиус 6, панели и меню — 8, бейджи — 4.
+- Рельс: вверху знак в хроме и «TIGO», пункты одного кегля; активный — плашка с обводкой по контуру, по ней раз в период проходит блик (один таймер на окно, смена пункта его не перезапускает).
+- Знаки: `tools/build_brand.py` собирает из `assets/brand/sources/tigo-simple.svg` и токенов SVG окна, трея и рельса; растры и `app.ico` — `tools/generate_icons.mjs`. Трей «работа» светится цветом успеха, «покой» — фиолетовым неоном.
+

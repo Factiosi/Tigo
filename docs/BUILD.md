@@ -15,14 +15,19 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt -r requirements-build.txt
 ```
 
-## Ассеты (ico / tray)
+## Ассеты (знаки, ico, трей)
+
+Знаки собираются из белого мастера `assets/brand/sources/tigo-simple.svg` и токенов Factiosi Umbrae:
 
 ```powershell
+python tools\build_brand.py
 cd tools
 npm install
 node generate_icons.mjs
 cd ..
 ```
+
+Токены Umbrae обновляет `scripts\sync_umbrae.ps1` (нужен клон Factiosi рядом, `Repository\Factiosi`).
 
 ## Сборка
 

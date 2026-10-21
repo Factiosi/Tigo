@@ -173,3 +173,12 @@ class AppUpdateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VersionOrderTests(unittest.TestCase):
+    def test_dev_build_is_older_than_its_release(self) -> None:
+        from src.modules.updates.app import _version_tuple
+
+        self.assertLess(_version_tuple("1.5.0-dev"), _version_tuple("1.5.0"))
+        self.assertLess(_version_tuple("1.4.0"), _version_tuple("1.5.0-dev"))
+        self.assertEqual(_version_tuple("v1.5.0"), _version_tuple("1.5.0"))

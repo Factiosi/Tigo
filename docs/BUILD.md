@@ -92,9 +92,9 @@ dist\Tigo\Tigo.exe --debug-console
 
 Дополнительно проверьте: второй `--daemon` не создаёт новый экземпляр; start/stop и подбор стратегий выполняются без консольных окон; debug console открывается из GUI.
 
-## winws runtime
+## winws2 runtime
 
-`bin\` и `utils\` **не входят** в git, standalone и installer. При первом запуске daemon независимо от настроек стратегий получает обязательный runtime из официального релиза Flowseal. Перед распространением проверьте, что installer не содержит сторонний runtime.
+`bin\`, `lua\`, `utils\` и `engine-version.txt` **не входят** в git, standalone и installer. При первом запуске daemon независимо от настроек стратегий скачивает движок winws2 из официального релиза [zapret2](https://github.com/bol-van/zapret2/releases/latest) (`winws2.exe`, `WinDivert.dll`, `WinDivert64.sys`, `cygwin1.dll`, `zapret-lib.lua`, `zapret-antidpi.lua`) и сверяет архив с `sha256sum.txt`. Стратегии, листы и фейки по-прежнему приходят из релиза Flowseal. Перед распространением проверьте, что installer не содержит сторонний runtime.
 
 ## Архитектура
 

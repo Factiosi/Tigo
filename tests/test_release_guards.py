@@ -115,51 +115,49 @@ class RuntimeBootstrapTests(unittest.TestCase):
     def test_existing_runtime_skips_download(self) -> None:
         with (
             patch("src.modules.updates.service.runtime_installed", return_value=True),
-            patch("src.modules.updates.service.fetch_latest_release_asset_url") as fetch,
+            patch("src.modules.updates.service.engine_update_available") as check,
+            patch("src.modules.updates.service.install_engine") as install,
         ):
             self.assertTrue(ensure_runtime_installed().ok)
-            fetch.assert_not_called()
+            check.assert_not_called()
+            install.assert_not_called()
 
     def test_missing_runtime_is_installed_independently(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            staging = root / "staging"
-            source = staging / "source"
-            source.mkdir(parents=True)
-            runtime_version = root / "runtime-version.txt"
-            installed = False
+        installed = False
 
-            def install_runtime(_source: Path) -> None:
-                nonlocal installed
-                installed = True
+        def install(_release) -> str:
+            nonlocal installed
+            installed = True
+            return "v1.0.6"
 
-            with (
-                patch(
-                    "src.modules.updates.service.runtime_installed",
-                    side_effect=lambda: installed,
-                ),
-                patch(
-                    "src.modules.updates.service.fetch_latest_release_asset_url",
-                    return_value=("1.10.1", "https://example.invalid/release.zip"),
-                ),
-                patch(
-                    "src.modules.updates.service.download_release_to_staging",
-                    return_value=source,
-                ),
-                patch(
-                    "src.modules.updates.service.transform_runtime",
-                    side_effect=install_runtime,
-                ),
-                patch("src.modules.updates.service.staging_dir", return_value=staging),
-                patch(
-                    "src.modules.updates.service.runtime_version_path",
-                    return_value=runtime_version,
-                ),
-            ):
-                result = ensure_runtime_installed()
+        with (
+            patch("src.modules.updates.service.runtime_installed", side_effect=lambda: installed),
+            patch("src.modules.updates.service.install_engine", side_effect=install),
+        ):
+            result = ensure_runtime_installed()
 
-            self.assertTrue(result.ok)
-            self.assertEqual(runtime_version.read_text(encoding="utf-8"), "1.10.1\n")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.applied_tag, "v1.0.6")
+
+    def test_update_is_skipped_while_winws2_runs(self) -> None:
+        with (
+            patch("src.modules.updates.service.runtime_installed", return_value=True),
+            patch("src.modules.updates.service.is_canonical_winws_running", return_value=(True, 42)),
+            patch("src.modules.updates.service.engine_update_available") as check,
+        ):
+            self.assertTrue(ensure_runtime_installed(allow_update=True).ok)
+            check.assert_not_called()
+
+    def test_failed_update_keeps_installed_engine(self) -> None:
+        with (
+            patch("src.modules.updates.service.runtime_installed", return_value=True),
+            patch("src.modules.updates.service.is_canonical_winws_running", return_value=(False, None)),
+            patch("src.modules.updates.service.engine_update_available", return_value=object()),
+            patch("src.modules.updates.service.install_engine", side_effect=OSError("locked")),
+        ):
+            result = ensure_runtime_installed(allow_update=True)
+        self.assertTrue(result.ok)
+        self.assertIn("locked", result.message)
 
 
 if __name__ == "__main__":

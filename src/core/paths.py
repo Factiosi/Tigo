@@ -1,6 +1,6 @@
 """Application path layout.
 
-Runtime (winws, utils) lives next to the installed program.
+Runtime (winws2 engine, its Lua library, utils) lives next to the installed program.
 Flowseal strategies, versioned lists, user lists and fake bins live under AppData.
 """
 
@@ -39,6 +39,11 @@ GITHUB_RELEASE_API = (
     "https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest"
 )
 GITHUB_RELEASE_PAGE = "https://github.com/Flowseal/zapret-discord-youtube/releases/latest"
+ZAPRET2_RELEASE_API = "https://api.github.com/repos/bol-van/zapret2/releases/latest"
+ENGINE_EXE = "winws2.exe"
+LEGACY_ENGINE_EXE = "winws.exe"
+ENGINE_BIN_FILES = (ENGINE_EXE, "WinDivert.dll", "WinDivert64.sys", "cygwin1.dll")
+ENGINE_LUA_FILES = ("zapret-lib.lua", "zapret-antidpi.lua")
 TIGO_GITHUB_REPO = "Factiosi/Tigo"
 TIGO_RELEASE_API = "https://api.github.com/repos/Factiosi/Tigo/releases/latest"
 TIGO_RELEASE_PAGE = "https://github.com/Factiosi/Tigo/releases/latest"
@@ -163,9 +168,22 @@ def runtime_version_path() -> Path:
     return program_root() / "runtime-version.txt"
 
 
+def engine_version_path() -> Path:
+    return program_root() / "engine-version.txt"
+
+
 def bin_dir() -> Path:
-    """winws.exe and WinDivert drivers."""
+    """winws2.exe, cygwin and WinDivert drivers."""
     return program_root() / "bin"
+
+
+def engine_exe() -> Path:
+    return bin_dir() / ENGINE_EXE
+
+
+def lua_dir() -> Path:
+    """zapret2 Lua library loaded by winws2 via --lua-init."""
+    return program_root() / "lua"
 
 
 def utils_dir() -> Path:
@@ -304,8 +322,14 @@ def version_utils_dir(_version: str | None = None) -> Path:
     return utils_dir()
 
 
+def missing_engine_files() -> list[Path]:
+    required = [bin_dir() / name for name in ENGINE_BIN_FILES]
+    required += [lua_dir() / name for name in ENGINE_LUA_FILES]
+    return [path for path in required if not path.exists()]
+
+
 def runtime_installed() -> bool:
-    return (bin_dir() / "winws.exe").exists()
+    return not missing_engine_files()
 
 
 def _merge_copytree(src: Path, dest: Path, *, skip_names: frozenset[str] | None = None) -> None:

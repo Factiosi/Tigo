@@ -9,7 +9,6 @@ from src.core.paths import (
     USER_LIST_FILES,
     VERSIONED_LIST_FILES,
     _merge_copytree,
-    bin_dir,
     flowseal_fake_bin_dir,
     flowseal_user_lists_dir,
     flowseal_version_dir,
@@ -22,24 +21,12 @@ from src.modules.strategies.parser import convert_bat_to_strategy_text, list_str
 
 
 def transform_runtime(source_root: Path) -> None:
-    """Install winws runtime (bin without .bin fakes, utils) into program directory."""
-    program_root().mkdir(parents=True, exist_ok=True)
+    """Install Flowseal utils into the program directory.
 
-    src_bin = source_root / "bin"
-    if src_bin.exists():
-        dest_bin = bin_dir()
-        dest_bin.mkdir(parents=True, exist_ok=True)
-        for item in src_bin.iterdir():
-            if item.suffix.lower() == ".bin":
-                continue
-            target = dest_bin / item.name
-            if item.is_dir():
-                if target.exists():
-                    _merge_copytree(item, target)
-                else:
-                    shutil.copytree(item, target)
-            else:
-                shutil.copy2(item, target)
+    Flowseal's winws.exe and its WinDivert.dll are not copied: the engine is
+    winws2 from zapret2 (modules/updates/engine.py) with its own patched DLL.
+    """
+    program_root().mkdir(parents=True, exist_ok=True)
 
     src_utils = source_root / "utils"
     if src_utils.exists():

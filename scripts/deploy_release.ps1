@@ -80,7 +80,7 @@ $Required = @(
 foreach ($Path in $Required) {
     Assert-True (Test-Path $Path) "Required release file is missing: $Path"
 }
-foreach ($Forbidden in @("bin", "utils", "lists", "runtime-version.txt")) {
+foreach ($Forbidden in @("bin", "lua", "utils", "lists", "runtime-version.txt", "engine-version.txt")) {
     Assert-True (-not (Test-Path (Join-Path $Standalone $Forbidden))) "Forbidden runtime found in release: $Forbidden"
 }
 $McpFiles = Get-ChildItem $Standalone -Recurse -Force |

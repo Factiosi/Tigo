@@ -1,4 +1,9 @@
-"""Lightweight winws process probe (canonical path)."""
+"""Lightweight winws process probe (canonical path).
+
+Tigo's engine is bin/winws2.exe. bin/winws.exe left by Tigo before the winws2
+switch still counts as Tigo's own, so stop() can clean it up; winws/winws2
+from anywhere else is foreign and blocks the launch (WinDivert is shared).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,9 @@ import os
 from ctypes import wintypes
 from pathlib import Path
 
-from src.core.paths import bin_dir
+from src.core.paths import ENGINE_EXE, LEGACY_ENGINE_EXE, bin_dir
+
+_ENGINE_NAMES = frozenset({ENGINE_EXE, LEGACY_ENGINE_EXE})
 
 TH32CS_SNAPPROCESS = 0x00000002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -40,8 +47,8 @@ def _normalize_path(path: str) -> str:
     return os.path.normcase(text)
 
 
-def expected_winws_path() -> Path:
-    return (bin_dir() / "winws.exe").resolve()
+def _canonical_paths() -> frozenset[str]:
+    return frozenset(_normalize_path(str((bin_dir() / name).resolve())) for name in _ENGINE_NAMES)
 
 
 def _query_image_path(pid: int) -> str:
@@ -60,9 +67,7 @@ def _query_image_path(pid: int) -> str:
 
 
 def find_canonical_winws_pids() -> list[int]:
-    expected = _normalize_path(str(expected_winws_path()))
-    if not expected:
-        return []
+    expected = _canonical_paths()
 
     kernel32 = ctypes.windll.kernel32
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -78,10 +83,10 @@ def find_canonical_winws_pids() -> list[int]:
             return []
         while True:
             name = entry.szExeFile.lower()
-            if name == "winws.exe":
+            if name in _ENGINE_NAMES:
                 pid = int(entry.th32ProcessID)
                 image = _query_image_path(pid)
-                if image == expected:
+                if image in expected:
                     pids.append(pid)
             if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
                 break
@@ -92,8 +97,8 @@ def find_canonical_winws_pids() -> list[int]:
 
 
 def find_foreign_winws_processes() -> list[tuple[int, str]]:
-    """Return queryable winws.exe processes launched outside Tigo's bin directory."""
-    expected = _normalize_path(str(expected_winws_path()))
+    """Return queryable winws/winws2 processes launched outside Tigo's bin directory."""
+    expected = _canonical_paths()
     kernel32 = ctypes.windll.kernel32
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if snapshot in (-1, 0xFFFFFFFF):
@@ -106,10 +111,10 @@ def find_foreign_winws_processes() -> list[tuple[int, str]]:
         if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
             return []
         while True:
-            if entry.szExeFile.lower() == "winws.exe":
+            if entry.szExeFile.lower() in _ENGINE_NAMES:
                 pid = int(entry.th32ProcessID)
                 image = _query_image_path(pid)
-                if image and image != expected:
+                if image and image not in expected:
                     foreign.append((pid, image))
             if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
                 break

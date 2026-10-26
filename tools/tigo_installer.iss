@@ -46,7 +46,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Never package a locally downloaded third-party runtime by accident.
-Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Excludes: "bin\*;utils\*;lists\*;runtime-version.txt"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Excludes: "bin\*;\lua\*;utils\*;lists\*;runtime-version.txt;engine-version.txt"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"

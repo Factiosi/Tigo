@@ -76,11 +76,22 @@ src/
 ### Поток запуска winws
 
 ```
-GUI → daemon IPC → strategies.launcher.build_winws_launch(strategy) → WinwsLaunchSpec
-                → kernel.public.start(spec) → winws_runner → subprocess (CREATE_NO_WINDOW)
+GUI → daemon IPC → strategies.launcher.build_winws_launch(strategy)
+                → .txt (аргументы winws1) → плейсхолдеры → strategies.winws2.to_winws2_argv → WinwsLaunchSpec
+                → kernel.public.start(spec) → winws_runner → bin/winws2.exe (CREATE_NO_WINDOW)
 ```
 
 Kernel **не** парсит стратегии — только принимает готовый `WinwsLaunchSpec`.
+
+### winws2 и конвертер стратегий
+
+Движок — `winws2.exe` из официального релиза zapret2 (`bol-van/zapret2`). Flowseal по-прежнему выпускает стратегии под winws1, поэтому в `%APPDATA%` хранятся аргументы winws1, а перевод в winws2 делается **при каждом запуске** в `modules/strategies/winws2.py` (обновление конвертера не требует перекачивать Flowseal).
+
+- Перевод сохраняет семантику nfqws1, а не стиль PR Flowseal#18202: каждый фейк — отдельный `fake`-инстанс в группе своего `--payload` (tls/http/quic/discord/stun…), неявные умолчания nfqws1 прописаны явно (`fake_default_tls` с `rnd,rndsni,dupsid`, нулевые фейки 64/256 байт), `--dpi-desync-any-protocol` → группа «всё, что nfqws1 считал unknown» (`--payload=all` + Lua-фильтр `~…,empty`), `--dpi-desync-cutoff=nN` → `--out-range=<nN`, `multidisorder` → `multidisorder_legacy`.
+- Fooling (`tcp_ts`, `tcp_seq`/`tcp_ack`/`tcp_ts_up` для badseq, `tcp_md5`) и `repeats` идут только в инстансы, шлющие фейки: в winws2 fooling у `multisplit`/`multidisorder` портил бы настоящие сегменты.
+- Фейки подключаются через `--blob=fs_<имя файла>:@<путь>`, `blobs.lua` не нужен.
+- Опции без точного аналога в winws2 → `ConversionError`, стратегия не запускается. Единственное, что теряется молча с предупреждением в лог, — `altorder` у `hostfakesplit`/`fakedsplit` (в winws2 его нет).
+- «Своя стратегия»: аргументы winws1 конвертируются, аргументы winws2 (`--lua-desync`, `--payload`…) передаются как есть, библиотека Lua подключается автоматически.
 
 **Daemon vs GUI:** winws, tray, IPC и bootstrap (обновления, монитор) живут только в `run.py --daemon`. GUI без daemon не запускается; управление zapret — только через IPC.
 
@@ -88,7 +99,9 @@ Kernel **не** парсит стратегии — только принима�
 
 | Что | Где |
 |-----|-----|
-| winws, utils | `{program_root}/bin`, `{program_root}/utils` |
+| winws2, WinDivert, cygwin | `{program_root}/bin` (версия zapret2 — `{program_root}/engine-version.txt`) |
+| Lua-библиотека zapret2 | `{program_root}/lua` (`zapret-lib.lua`, `zapret-antidpi.lua`) |
+| utils Flowseal | `{program_root}/utils` |
 | иконки | `{program_root}/assets/icons` |
 | flowseal strategies | `%APPDATA%\Tigo\strategies\flowseal\{version}\*.txt` |
 | versioned lists | `%APPDATA%\Tigo\strategies\flowseal\{version}\lists\` |
@@ -105,7 +118,7 @@ Kernel **не** парсит стратегии — только принима�
 4. **Home page без inline-консоли** — статус через бейдж + тост; детали в debug console.
 5. **winws принадлежит только daemon** — GUI не запускает и не завершает процесс напрямую, включая подбор стратегий.
 6. **Automation ограничена** — source daemon разрешает MCP-команды; compiled daemon требует `TIGO_AUTOMATION=1`.
-7. **Runtime обязателен и независим от стратегий** — при отсутствии `bin/winws.exe` daemon скачивает официальный релиз Flowseal независимо от `strategy_source` и настроек автообновления.
+7. **Движок обязателен и независим от стратегий** — при отсутствии файлов winws2 daemon скачивает официальный релиз zapret2 (проверка по `sha256sum.txt`) независимо от `strategy_source` и настроек автообновления; при `auto_promote_updates` и остановленном winws2 обновляет его на старте. Из архива Flowseal берутся только стратегии, листы, фейки `.bin` и `utils` — его `winws.exe` и `WinDivert.dll` не ставятся (у zapret2 свой пропатченный DLL). Оставшийся от старых версий `bin/winws.exe` считается своим: его гасит stop и удаляет установка движка.
 8. **Самообновление Tigo** — проверка GitHub Releases (`Tigo-Setup-X.Y.Z.exe` + `.sha256`); автопроверка включена, автоустановка выключена.
 9. **Массовые тесты** — daemon владеет probe snapshot; GUI раскрывает только текущую стратегию, пауза 2 с, затем все завершённые.
 
@@ -113,7 +126,7 @@ Kernel **не** парсит стратегии — только принима�
 
 - **`kernel/service_api.py`** — legacy Win32 SCM API, используется только в `migrate.py` для удаления старого сервиса `zapret`. Deprecated для обычного запуска.
 - **DPI-тест** — backend пока не реализован; radio в UI отключён.
-- **winws stdout → DEVNULL** — пользователь не видит консоль winws; stderr читается только при immediate exit.
+- **winws2 stdout → DEVNULL** — пользователь не видит консоль winws2; stderr читается только при immediate exit.
 - **Имя repo Z2UI vs app Tigo** — намеренно не синхронизировано.
 
 ## Как добавить модуль

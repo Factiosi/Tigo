@@ -1,4 +1,4 @@
-"""Start/stop winws.exe via subprocess (shared by home and tests)."""
+"""Start/stop winws2.exe via subprocess (shared by home and tests)."""
 
 from __future__ import annotations
 

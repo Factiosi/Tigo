@@ -8,8 +8,9 @@ from typing import Callable
 
 from src.core.events import emit
 from src.core.debug_log import debug, info as log_info
-from src.core.paths import runtime_installed, runtime_version_path, staging_dir
+from src.core.paths import runtime_installed, staging_dir
 from src.core.settings import get_settings, save_settings
+from src.kernel.process_probe import is_canonical_winws_running
 from src.kernel.public import get_effective_runtime_status
 from src.modules.filters.game_filter import ensure_game_filter_synced
 from src.modules.filters.ipset_filter import keep_ipset_mode
@@ -24,7 +25,8 @@ from src.modules.updates.github import (
     download_release_to_staging,
     fetch_latest_release_asset_url,
 )
-from src.modules.updates.transformer import promote_staging, transform_runtime
+from src.modules.updates.engine import engine_update_available, install_engine
+from src.modules.updates.transformer import promote_staging
 
 MessageCallback = Callable[[str, bool], None]
 
@@ -57,48 +59,36 @@ def check_only() -> tuple[bool, str, str]:
     return format_check_message(info)
 
 
-def ensure_runtime_installed() -> ApplyResult:
-    """Install the mandatory winws runtime independently from strategy settings."""
+def ensure_runtime_installed(*, allow_update: bool = False) -> ApplyResult:
+    """Install the mandatory winws2 engine independently from strategy settings.
+
+    With ``allow_update`` a newer zapret2 release replaces the installed one,
+    but only while Tigo's winws2 is not running (its files are locked then).
+    """
+    release = None
     if runtime_installed():
-        return ApplyResult(True, "Runtime уже установлен.", toast_kind="success")
+        if not allow_update or is_canonical_winws_running()[0]:
+            return ApplyResult(True, "Движок winws2 уже установлен.", toast_kind="success")
+        release = engine_update_available()
+        if release is None:
+            return ApplyResult(True, "Движок winws2 актуален.", toast_kind="success")
 
-    tag, url = fetch_latest_release_asset_url()
-    if not url or not tag:
-        return ApplyResult(
-            False,
-            "Не удалось найти runtime в официальном релизе Flowseal на GitHub.",
-            toast_kind="error",
-        )
-
-    staging = staging_dir()
     try:
-        source = download_release_to_staging(url, tag)
-        transform_runtime(source)
-        if not runtime_installed():
-            return ApplyResult(
-                False,
-                "Архив Flowseal загружен, но bin/winws.exe в нём не найден.",
-                toast_kind="error",
-            )
-        runtime_version_path().write_text(tag + "\n", encoding="utf-8")
-        log_info("updates", f"installed mandatory runtime from Flowseal {tag}")
-        return ApplyResult(
-            True,
-            f"Runtime Flowseal {tag} установлен.",
-            toast_kind="success",
-            applied_tag=tag,
-        )
+        tag = install_engine(release)
     except Exception as exc:  # noqa: BLE001
-        debug("updates", f"runtime install failed: {exc}", level="error")
-        return ApplyResult(False, f"Не удалось установить runtime: {exc}", toast_kind="error")
-    finally:
-        if staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
+        debug("updates", f"engine install failed: {exc}", level="error")
+        if runtime_installed():
+            return ApplyResult(True, f"Не удалось обновить winws2: {exc}", toast_kind="warning")
+        return ApplyResult(False, f"Не удалось установить winws2: {exc}", toast_kind="error")
+    if not runtime_installed():
+        return ApplyResult(False, "Архив zapret2 установлен не полностью.", toast_kind="error")
+    log_info("updates", f"installed winws2 engine from zapret2 {tag}")
+    return ApplyResult(True, f"Движок winws2 (zapret2 {tag}) установлен.", toast_kind="success", applied_tag=tag)
 
 
 def check_and_apply(*, restart_running: bool = True) -> ApplyResult:
     settings = get_settings()
-    missing_local = not has_flowseal_strategies() or not runtime_installed()
+    missing_local = not has_flowseal_strategies()
     info = check_for_update(None if missing_local else settings.active_version)
     if info.error and not info.update_available:
         return ApplyResult(False, info.error, toast_kind="error")
@@ -178,7 +168,7 @@ def run_startup_updates(on_message: MessageCallback | None = None) -> None:
         on_message(msg, error=not ok or kind == "error")
 
     if settings.auto_promote_updates and (
-        info_obj.update_available or not has_flowseal_strategies() or not runtime_installed()
+        info_obj.update_available or not has_flowseal_strategies()
     ):
         result = check_and_apply()
         if on_message:

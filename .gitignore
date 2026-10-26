@@ -50,3 +50,5 @@ nuitka-crash-report.xml
 /lists/
 /utils/
 /runtime-version.txt
+/lua/
+/engine-version.txt

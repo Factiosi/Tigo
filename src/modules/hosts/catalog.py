@@ -25,8 +25,6 @@ from src.core.paths import cache_dir, program_root
 SCHEMA_VERSION = "1"
 CATALOG_NAME = "hosts_catalog.sqlite3"
 DIRECT_PROFILE = "hosts"
-# Comss DNS is not offered on the DNS page either.
-HIDDEN_PROFILES = frozenset({"comss_dns"})
 CATEGORY_TITLES = {"ai": "Нейросети", "other": "Сервисы", "direct": "Прямые записи"}
 
 
@@ -109,7 +107,6 @@ def load_catalog(path: Path | None = None) -> Catalog:
             for pid, name in connection.execute(
                 "SELECT profile_id, name FROM dns_profiles WHERE enabled = 1 ORDER BY sort_order, name"
             )
-            if pid not in HIDDEN_PROFILES
         )
         answered: dict[str, set[str]] = {}
         for service_id, profile_id in connection.execute(

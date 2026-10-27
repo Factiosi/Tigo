@@ -78,10 +78,11 @@ class CatalogTests(unittest.TestCase):
         self.path = build_catalog(Path(self._tmp.name) / "c.sqlite3")
         self.catalog = load_catalog(self.path)
 
-    def test_hidden_profiles_and_disabled_services_are_skipped(self) -> None:
-        self.assertEqual([pid for pid, _ in self.catalog.profiles], ["zapret_dns", "xbox_dns"])
-        self.assertEqual([s.id for s in self.catalog.services], ["dns.chat", "hosts.direct"])
+    def test_disabled_services_are_skipped(self) -> None:
+        self.assertEqual([pid for pid, _ in self.catalog.profiles], ["zapret_dns", "xbox_dns", "comss_dns"])
+        self.assertEqual([s.id for s in self.catalog.services], ["dns.chat", "dns.comss_only", "hosts.direct"])
         self.assertEqual(self.catalog.service("dns.chat").domains, 3)
+        self.assertEqual(self.catalog.service("dns.comss_only").profiles, ("comss_dns",))
 
     def test_profile_rows_with_fallback_and_private_filter(self) -> None:
         rows = service_rows(self.catalog, "dns.chat", "xbox_dns", ipv6=False)

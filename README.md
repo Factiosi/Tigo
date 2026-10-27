@@ -1,6 +1,35 @@
+<div align="center">
+
+<img src="assets/icons/app.svg" width="120" alt="Tigo">
+
 # Tigo
 
-Tigo — приложение для Windows: запуск и проверка стратегий [Flowseal](https://github.com/Flowseal/zapret-discord-youtube) (zapret / winws). Фоновый процесс держит winws, значок в трее и служебные задачи; окно только управляет ими.
+Окно управления zapret2 для Windows: стратегии Flowseal на winws2, их подбор, DNS и hosts.
+
+[![Скачать последнюю версию](https://img.shields.io/badge/Скачать-последнюю%20версию-8b5cf6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Factiosi/Tigo/releases/latest)
+
+[![Релиз](https://img.shields.io/github/v/release/Factiosi/Tigo?label=релиз&color=8b5cf6)](https://github.com/Factiosi/Tigo/releases/latest)
+[![Скачиваний](https://img.shields.io/github/downloads/Factiosi/Tigo/total?label=скачиваний&color=8b5cf6)](https://github.com/Factiosi/Tigo/releases)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?logo=windows&logoColor=white)](#требования)
+[![Zapret DNS](https://img.shields.io/badge/Zapret%20DNS-состояние-1f6fd6)](https://dns.zapret.moe/)
+
+</div>
+
+## Что умеет
+
+- **Обход на winws2.** Движок — `winws2.exe` из официального релиза [zapret2](https://github.com/bol-van/zapret2). Стратегии [Flowseal](https://github.com/Flowseal/zapret-discord-youtube) выходят под winws1, Tigo переводит их в winws2 сам при каждом запуске.
+- **Подбор стратегий.** Прогоняет выбранные стратегии по очереди и показывает, какие открывают нужные сайты. Результаты хранятся по версии Flowseal.
+- **Фоновая работа.** Обход держит фоновый процесс со значком в трее; окно можно закрыть.
+- **Изменение DNS.** Zapret DNS, Comss DNS, Cloudflare и Google в один клик для всех адаптеров.
+- **Редактор hosts.** Готовые наборы (Telegram в браузере, блокировка MAX и гос. СМИ) и сервисы через DNS-профили: нейросети, Spotify, Twitch, Notion, Discord, YouTube и другие.
+- **TG WS Proxy.** Локальный прокси для Telegram.
+
+## Zapret DNS
+
+DNS-сервер проекта Zapret: открывает сервисы, закрытые для России, — ChatGPT, Gemini, Claude, Copilot, Spotify, Notion и ещё около девяноста.
+
+- Полный список сервисов и адреса: [`docs/ZAPRET-DNS.md`](docs/ZAPRET-DNS.md)
+- Состояние сервера: [dns.zapret.moe](https://dns.zapret.moe/)
 
 ## Требования
 
@@ -9,15 +38,15 @@ Tigo — приложение для Windows: запуск и проверка �
 
 ## Установка
 
-1. На странице [релизов](https://github.com/Factiosi/Tigo/releases/latest) скачайте `Tigo-Setup-<версия>.exe`.
+1. Скачайте `Tigo-Setup-<версия>.exe` со страницы [последнего релиза](https://github.com/Factiosi/Tigo/releases/latest).
 2. Установите программу и откройте Tigo из меню «Пуск».
 3. Подтвердите запрос UAC.
 
-При первом запуске Tigo скачает движок winws2 из релиза [zapret2](https://github.com/bol-van/zapret2) и стратегии Flowseal; стратегии Flowseal для winws1 Tigo переводит в формат winws2 сам. На главном экране выберите стратегию и нажмите **Запуск**. Для подбора откройте **Подбор стратегий**, отметьте варианты и запустите тест — результаты сохраняются по версии Flowseal.
+При первом запуске Tigo скачает движок winws2 и стратегии Flowseal. На главном экране выберите стратегию и нажмите **Запуск**. Для подбора откройте **Подбор стратегий**, отметьте варианты и запустите тест.
 
 ## Обновления
 
-Проверка обновлений Tigo включена по умолчанию; установка — вручную в **Настройках**. Стратегии и файлы Flowseal обновляются отдельно.
+Проверка обновлений Tigo включена по умолчанию; установка — вручную в **Настройках**. Стратегии Flowseal, движок winws2 и каталог сервисов hosts обновляются отдельно.
 
 ## Данные
 

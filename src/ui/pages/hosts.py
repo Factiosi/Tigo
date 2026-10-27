@@ -57,6 +57,7 @@ class HostsPage:
         self._catalog_error = ""
         self._unavailable: set[str] = set()
         self._service_rows: dict[str, ft.Control] = {}
+        self._checkboxes: dict[str, ft.Checkbox] = {}
         self._group_headers: dict[str, ft.Control] = {}
 
     def build(self) -> ft.Control:
@@ -93,8 +94,8 @@ class HostsPage:
             selectable=True,
         )
         self._root.content = scroll_page(
-            self._services_section(state),
             block_section("Готовые наборы", *preset_rows),
+            self._services_section(state),
             block_section(
                 "Файл hosts",
                 file_info,
@@ -137,6 +138,7 @@ class HostsPage:
         )
         search = make_text_field("Поиск", self._query, on_change=self._on_search)
         self._service_rows = {}
+        self._checkboxes = {}
         self._group_headers = {}
         groups: list[ft.Control] = []
         for category in _CATEGORY_ORDER:
@@ -168,7 +170,8 @@ class HostsPage:
             ft.Row(
                 [
                     pill_button("Применить", primary=True, on_click=self._apply_services),
-                    pill_button("Снять все", on_click=self._clear_services),
+                    pill_button("Выделить всё", on_click=lambda _: self._check_visible(True)),
+                    pill_button("Снять всё", on_click=lambda _: self._check_visible(False)),
                     pill_button("Обновить каталог", on_click=self._update_catalog),
                     ui_text(f"Каталог {self._catalog.version}", color=T.TEXT_MUTED, size=12),
                 ],
@@ -188,6 +191,7 @@ class HostsPage:
             disabled=unavailable,
             on_change=lambda e, sid=service.id: self._on_toggle(sid, bool(e.control.value)),
         )
+        self._checkboxes[service.id] = checkbox
         trailing: list[ft.Control] = [status_pill("active", "В hosts", dense=True)] if written else []
         return ft.Row(
             [checkbox, ui_text(label, expand=True, color=T.TEXT_MUTED if unavailable else T.TEXT), *trailing],
@@ -270,9 +274,14 @@ class HostsPage:
         selection = self._selection()
         self._run(lambda: apply_services(selection))
 
-    def _clear_services(self, _: ft.ControlEvent) -> None:
-        self._selected.clear()
-        self._run(lambda: apply_services({}))
+    def _check_visible(self, checked: bool) -> None:
+        """Tick or untick every service the search shows; hosts changes on «Применить»."""
+        for service_id, checkbox in self._checkboxes.items():
+            if checkbox.disabled or not self._service_rows[service_id].visible:
+                continue
+            checkbox.value = checked
+            self._on_toggle(service_id, checked)
+        self.page.update()
 
     def _update_catalog(self, _: ft.ControlEvent) -> None:
         def work():

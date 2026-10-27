@@ -21,6 +21,17 @@ MENU_ITEM_HEIGHT = 38
 MENU_EDGE_INSET = 4
 MENU_POPUP_VPAD = 8
 MENU_ITEM_RADIUS = 8
+def lucide_icon(name: str, *, color: str, size: int = 18) -> ft.Image:
+    """Lucide icon from assets/icons/lucide (ISC); the stroke takes ``color``."""
+    return ft.Image(
+        src=f"/assets/icons/lucide/{name}.svg",
+        width=size,
+        height=size,
+        color=color,
+        color_blend_mode=ft.BlendMode.SRC_IN,
+    )
+
+
 def menu_shadow() -> ft.BoxShadow:
     return ft.BoxShadow(
         blur_radius=16,

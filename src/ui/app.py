@@ -27,7 +27,7 @@ from src.modules.lifecycle.public import (
     should_start_hidden,
     start_daemon_watchdog,
 )
-from src.ui.components import ANIM, close_active_select, ui_text
+from src.ui.components import ANIM, close_active_select, lucide_icon, ui_text
 from src.ui.pages.dns import DnsPage
 from src.ui.pages.home import HomePage
 from src.ui.pages.lists import ListsPage
@@ -37,23 +37,18 @@ from src.ui.pages.tg_ws_proxy import TgWsProxyPage
 from src.ui.notifications import present_app_update_result
 
 
-def build_nav_items() -> list[tuple[str, str, str, str]]:
+def build_nav_items() -> list[tuple[str, str, str]]:
+    """(route, label, Lucide icon name)."""
     settings = get_settings()
-    items: list[tuple[str, str, str, str]] = [
-        ("home", "Главный экран", ft.Icons.HOME_OUTLINED, ft.Icons.HOME_ROUNDED),
-    ]
+    items: list[tuple[str, str, str]] = [("home", "Главный экран", "house")]
     if settings.strategy_source == "flowseal":
         if has_flowseal_strategies(settings):
-            items.append(
-                ("strategies", "Подбор стратегий", ft.Icons.TUNE_OUTLINED, ft.Icons.TUNE),
-            )
-        items.append(
-            ("lists", "Редактирование листов", ft.Icons.EDIT_NOTE_OUTLINED, ft.Icons.EDIT_NOTE),
-        )
+            items.append(("strategies", "Подбор стратегий", "flask-conical"))
+        items.append(("lists", "Редактирование листов", "file-cog"))
     items.extend(
         [
-            ("dns", "Изменение DNS", ft.Icons.DNS_OUTLINED, ft.Icons.DNS),
-            ("tg_ws_proxy", "TG WS Proxy", ft.Icons.SEND_OUTLINED, ft.Icons.SEND),
+            ("dns", "Изменение DNS", "columns-3-cog"),
+            ("tg_ws_proxy", "TG WS Proxy", "send"),
         ]
     )
     return items
@@ -228,7 +223,7 @@ class TigoApp:
 
         page.run_task(loop)
 
-    def _nav_button(self, route: str, label: str, icon, selected_icon) -> ft.Container:
+    def _nav_button(self, route: str, label: str, icon: str) -> ft.Container:
         active = route == self._route
 
         def on_click(_: ft.ControlEvent) -> None:
@@ -237,7 +232,7 @@ class TigoApp:
         color = T.TEXT if active else T.TEXT_FAINT
         row = ft.Row(
             [
-                ft.Icon(selected_icon if active else icon, color=color, size=18),
+                lucide_icon(icon, color=color),
                 ui_text(
                     label,
                     color=color,
@@ -294,16 +289,8 @@ class TigoApp:
     def _build_sidebar(self) -> ft.Container:
         self._rail_sheen = None
         nav = build_nav_items()
-        self._nav_controls = [
-            self._nav_button(route, label, icon, selected_icon)
-            for route, label, icon, selected_icon in nav
-        ]
-        settings_btn = self._nav_button(
-            "settings",
-            "Настройки",
-            ft.Icons.SETTINGS_OUTLINED,
-            ft.Icons.SETTINGS,
-        )
+        self._nav_controls = [self._nav_button(route, label, icon) for route, label, icon in nav]
+        settings_btn = self._nav_button("settings", "Настройки", "settings")
         return ft.Container(
             width=T.SIDEBAR_WIDTH,
             bgcolor=T.GROUND,

@@ -54,7 +54,8 @@ src/
 │   ├── strategies/       # парсинг .bat, репозиторий, launcher
 │   ├── strategy_testing/ # daemon-раннер тестов, probe, cache результатов
 │   ├── updates/          # GitHub releases, transformer
-│   └── filters/          # game filter, ipset, tcp timestamps
+│   ├── filters/          # game filter, ipset, tcp timestamps
+│   └── hosts/            # hosts Windows: готовые наборы блоками `# >>> tigo:<id> >>>`, резервная копия
 ├── update_splash/  # отдельный процесс окна обновления
 └── ui/
     ├── components/ # контролы без знания экрана

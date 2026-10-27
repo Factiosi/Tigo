@@ -30,6 +30,7 @@ from src.modules.lifecycle.public import (
 from src.ui.components import ANIM, close_active_select, lucide_icon, ui_text
 from src.ui.pages.dns import DnsPage
 from src.ui.pages.home import HomePage
+from src.ui.pages.hosts import HostsPage
 from src.ui.pages.lists import ListsPage
 from src.ui.pages.strategies import StrategiesPage
 from src.ui.pages.settings import SettingsPage
@@ -48,6 +49,7 @@ def build_nav_items() -> list[tuple[str, str, str]]:
     items.extend(
         [
             ("dns", "Изменение DNS", "columns-3-cog"),
+            ("hosts", "Редактирование hosts", "server-cog"),
             ("tg_ws_proxy", "TG WS Proxy", "send"),
         ]
     )
@@ -394,6 +396,8 @@ class TigoApp:
             self._body.content = ListsPage(self.page).build()
         elif route == "dns":
             self._body.content = DnsPage(self.page).build()
+        elif route == "hosts":
+            self._body.content = HostsPage(self.page).build()
         elif route == "tg_ws_proxy":
             self._body.content = TgWsProxyPage(self.page).build()
         elif route == "settings":

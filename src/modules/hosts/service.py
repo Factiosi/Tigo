@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
+from ctypes import wintypes
 from dataclasses import dataclass
 
 from src.core.debug_log import info, warn
@@ -20,6 +22,8 @@ from src.modules.hosts.hosts_file import (
 )
 from src.modules.hosts.presets import PRESETS, HostsPreset
 
+_ASSOCSTR_EXECUTABLE = 2
+_SW_SHOWNORMAL = 1
 _ACCESS_HINT = (
     "Нет доступа к файлу hosts. Его может защищать антивирус "
     "(в Защитнике Windows — «Изменение файла hosts»): разрешите изменение и повторите."
@@ -80,10 +84,27 @@ def restore_backup() -> tuple[bool, str]:
     return (True, "Файл hosts восстановлен из копии, снятой до первого изменения Tigo.") if ok else (False, error)
 
 
+def default_text_editor() -> str:
+    """Executable registered for .txt files, Notepad when there is none."""
+    buffer = ctypes.create_unicode_buffer(1024)
+    size = wintypes.DWORD(len(buffer))
+    result = ctypes.windll.shlwapi.AssocQueryStringW(
+        0, _ASSOCSTR_EXECUTABLE, ".txt", "open", buffer, ctypes.byref(size)
+    )
+    if result == 0 and buffer.value and os.path.isfile(buffer.value):
+        return buffer.value
+    return "notepad.exe"
+
+
 def open_in_editor() -> tuple[bool, str]:
-    """Open hosts in Notepad; Tigo runs elevated, so Notepad can save it."""
-    try:
-        os.startfile("notepad.exe", arguments=str(hosts_path()))  # type: ignore[attr-defined]
-    except OSError as exc:
-        return False, str(exc)
-    return True, "Файл hosts открыт в Блокноте. После сохранения обновите страницу."
+    """Open hosts in the default text editor, elevated so it can save the file."""
+    editor = default_text_editor()
+    code = ctypes.windll.shell32.ShellExecuteW(None, "runas", editor, f'"{hosts_path()}"', None, _SW_SHOWNORMAL)
+    if code <= 32 and editor != "notepad.exe":
+        warn("hosts", f"{editor} did not start elevated ({code}), falling back to Notepad")
+        editor = "notepad.exe"
+        code = ctypes.windll.shell32.ShellExecuteW(None, "runas", editor, f'"{hosts_path()}"', None, _SW_SHOWNORMAL)
+    if code <= 32:
+        return False, f"Не удалось открыть редактор (код {code})."
+    name = os.path.splitext(os.path.basename(editor))[0]
+    return True, f"Файл hosts открыт в {name} от имени администратора. После сохранения нажмите «Обновить»."

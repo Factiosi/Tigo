@@ -47,7 +47,7 @@ class HostsPage:
                 file_info,
                 ft.Row(
                     [
-                        pill_button("Открыть в Блокноте", on_click=self._open),
+                        pill_button("Открыть в редакторе", on_click=self._open),
                         pill_button("Обновить", on_click=lambda _: self._reload()),
                         pill_button(
                             "Вернуть копию до Tigo",

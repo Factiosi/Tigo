@@ -561,7 +561,9 @@ def make_select(
     option_trailing: Callable[[str], ft.Control | None] | None = None,
 ) -> ft.Column:
     if menu_height is not None:
-        resolved_menu_height: int = menu_height
+        # An explicit height is a ceiling: a short list must not leave an empty tail.
+        natural = len(options) * MENU_ITEM_HEIGHT + max(0, len(options) - 1) * 4 + MENU_POPUP_VPAD
+        resolved_menu_height: int = min(menu_height, max(natural, MENU_ITEM_HEIGHT + MENU_POPUP_VPAD))
     else:
         resolved_menu_height = _calc_menu_height(len(options))
     menu_content_height = max(MENU_ITEM_HEIGHT, resolved_menu_height - MENU_POPUP_VPAD)

@@ -571,24 +571,12 @@ def flush_dns_cache_native() -> bool:
 DOH_TEMPLATES = {
     "83.217.211.149": "https://dns.zapret.moe/dns-query",
     "2a03:afc0:9::235d": "https://dns.zapret.moe/dns-query",
-    "9.9.9.9": "https://dns.quad9.net/dns-query",
-    "149.112.112.112": "https://dns.quad9.net/dns-query",
-    "94.140.14.14": "https://dns.adguard.com/dns-query",
-    "94.140.15.15": "https://dns.adguard.com/dns-query",
-    "185.222.222.222": "https://doh.sb/dns-query",
-    "45.11.45.11": "https://doh.sb/dns-query",
-    "208.67.222.222": "https://doh.opendns.com/dns-query",
-    "208.67.220.220": "https://doh.opendns.com/dns-query",
-    "84.21.189.133": "https://dns.malw.link/dns-query",
-    "64.188.98.242": "https://dns.malw.link/dns-query",
-    "194.180.189.33": "https://dnsdoh.art:444/dns-query",
-    # Xbox DNS (xbox-dns.ru)
-    "111.88.96.50": "https://xbox-dns.ru/dns-query",
-    "111.88.96.51": "https://xbox-dns.ru/dns-query",
-    "87.228.47.200": "https://xbox-dns.ru/dns-query",
-    "87.228.47.201": "https://xbox-dns.ru/dns-query",
-    "176.99.11.77": "https://xbox-dns.ru/dns-query",
-    "80.78.247.254": "https://xbox-dns.ru/dns-query",
+    "83.220.169.155": "https://dns.comss.one/dns-query",
+    "212.109.195.93": "https://dns.comss.one/dns-query",
+    "1.1.1.1": "https://cloudflare-dns.com/dns-query",
+    "1.0.0.1": "https://cloudflare-dns.com/dns-query",
+    "8.8.8.8": "https://dns.google/dns-query",
+    "8.8.4.4": "https://dns.google/dns-query",
 }
 
 def get_windows_version() -> Tuple[int, int, int]:

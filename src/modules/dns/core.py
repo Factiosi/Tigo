@@ -569,10 +569,8 @@ def flush_dns_cache_native() -> bool:
 
 # DoH Template URLs
 DOH_TEMPLATES = {
-    "1.1.1.1": "https://cloudflare-dns.com/dns-query",
-    "1.0.0.1": "https://cloudflare-dns.com/dns-query",
-    "8.8.8.8": "https://dns.google/dns-query",
-    "8.8.4.4": "https://dns.google/dns-query",
+    "83.217.211.149": "https://dns.zapret.moe/dns-query",
+    "2a03:afc0:9::235d": "https://dns.zapret.moe/dns-query",
     "9.9.9.9": "https://dns.quad9.net/dns-query",
     "149.112.112.112": "https://dns.quad9.net/dns-query",
     "94.140.14.14": "https://dns.adguard.com/dns-query",
@@ -591,9 +589,6 @@ DOH_TEMPLATES = {
     "87.228.47.201": "https://xbox-dns.ru/dns-query",
     "176.99.11.77": "https://xbox-dns.ru/dns-query",
     "80.78.247.254": "https://xbox-dns.ru/dns-query",
-    # Comss DNS (dns.comss.one)
-    "83.220.169.155": "https://dns.comss.one/dns-query",
-    "212.109.195.93": "https://dns.comss.one/dns-query",
 }
 
 def get_windows_version() -> Tuple[int, int, int]:

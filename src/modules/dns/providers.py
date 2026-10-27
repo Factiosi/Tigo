@@ -5,22 +5,6 @@
 
 DNS_PROVIDERS = {
     "Популярные": {
-        "Cloudflare": {
-            "ipv4": ["1.1.1.1", "1.0.0.1"],
-            "ipv6": ["2606:4700:4700::1111", "2606:4700:4700::1001"],
-            "desc": "Быстрый и приватный",
-            "icon": "fa5s.bolt",
-            "color": "#f48120",
-            "doh": "https://cloudflare-dns.com/dns-query"
-        },
-        "Google DNS": {
-            "ipv4": ["8.8.8.8", "8.8.4.4"],
-            "ipv6": ["2001:4860:4860::8888", "2001:4860:4860::8844"],
-            "desc": "Надёжный",
-            "icon": "fa5b.google",
-            "color": "#4285f4",
-            "doh": "https://dns.google/dns-query"
-        },
         "Dns.SB": {
             "ipv4": ["185.222.222.222", "45.11.45.11"],
             "ipv6": ["2a09::", "2a11::"],
@@ -65,6 +49,14 @@ DNS_PROVIDERS = {
         }
     },
     "Для ИИ": {
+        "Zapret DNS": {
+            "ipv4": ["83.217.211.149"],
+            "ipv6": ["2a03:afc0:9::235d"],
+            "desc": "ИИ и сервисы, закрытые для РФ",
+            "icon": "fa5s.globe",
+            "color": "#1f6fd6",
+            "doh": "https://dns.zapret.moe/dns-query"
+        },
         "Xbox DNS": {
             "ipv4": ["111.88.96.50", "111.88.96.51"],
             "ipv6": [],
@@ -88,14 +80,6 @@ DNS_PROVIDERS = {
             "icon": "fa5s.robot",
             "color": "#6d6d6d",
             "doh": "https://xbox-dns.ru/dns-query"
-        },
-        "Comss DNS": {
-            "ipv4": ["83.220.169.155", "212.109.195.93"],
-            "ipv6": [],
-            "desc": "ChatGPT",
-            "icon": "fa5s.brain",
-            "color": "#673ab7",
-            "doh": "https://dns.comss.one/dns-query"
         },
         "dns.malw.link": {
             "ipv4": ["84.21.189.133", "64.188.98.242"],

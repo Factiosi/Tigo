@@ -3,3 +3,4 @@ httpx[http2]>=0.27.0
 cryptography>=42
 pystray>=0.19.5
 Pillow>=10.0.0
+zstandard>=0.22

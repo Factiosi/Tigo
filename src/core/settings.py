@@ -49,6 +49,9 @@ class AppSettings:
     tg_ws_proxy_dc_ip: list[str] = field(
         default_factory=lambda: ["2:149.154.167.220", "4:149.154.167.220"]
     )
+    # hosts editor: catalog service id -> DNS profile id ("hosts" for direct entries)
+    hosts_services: dict[str, str] = field(default_factory=dict)
+    hosts_profile: str = "zapret_dns"
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":

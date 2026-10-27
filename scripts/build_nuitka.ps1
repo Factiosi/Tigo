@@ -50,6 +50,7 @@ $buildArgs = @(
     "--company-name=Tigo",
     "--include-data-dir=$(Join-Path $Repo 'assets\icons')=assets/icons",
     "--include-data-dir=$(Join-Path $Repo 'assets\fonts')=assets/fonts",
+    "--include-data-dir=$(Join-Path $Repo 'assets\hosts')=assets/hosts",
     "--include-package=src",
     "--include-package=flet",
     "--include-package-data=flet",

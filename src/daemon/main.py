@@ -105,6 +105,10 @@ class TigoDaemon:
             run_startup_updates(
                 on_message=lambda msg, error=False: warn("updates", msg) if error else info("updates", msg)
             )
+            if get_settings().auto_check_updates_on_startup:
+                threading.Thread(
+                    target=self._refresh_hosts_catalog, daemon=True, name="tigo-hosts-catalog"
+                ).start()
             runtime_result = ensure_runtime_installed(allow_update=get_settings().auto_promote_updates)
             if runtime_result.ok:
                 launch_last_strategy_if_configured(from_daemon=True)
@@ -116,6 +120,14 @@ class TigoDaemon:
             runtime_state.mark_failed(f"Инициализация daemon завершилась ошибкой: {exc}")
         finally:
             self._bootstrap_done.set()
+
+    @staticmethod
+    def _refresh_hosts_catalog() -> None:
+        from src.modules.hosts.service import refresh_catalog_and_services
+
+        ok, message = refresh_catalog_and_services()
+        if message:
+            (info if ok else warn)("hosts", message)
 
     def _tray_status(self) -> tuple[bool, bool]:
         from src.kernel.process_probe import is_canonical_winws_running

@@ -7,8 +7,13 @@ import os
 from ctypes import wintypes
 from dataclasses import dataclass
 
+import httpx
+
 from src.core.debug_log import info, warn
+from src.core.settings import get_settings, save_settings
 from src.modules.dns.core import flush_dns_cache_native
+from src.modules.hosts.catalog import Catalog, CatalogError, has_ipv6_route, load_catalog, service_rows
+from src.modules.hosts.catalog_update import catalog_check_due, update_catalog
 from src.modules.hosts.hosts_file import (
     DEFAULT_HOSTS,
     HostsSummary,
@@ -71,9 +76,73 @@ def set_preset(preset_id: str, enabled: bool) -> tuple[bool, str]:
     return True, f"«{preset.title}»: {'включено' if enabled else 'выключено'}."
 
 
+SERVICE_BLOCK_PREFIX = "svc-"
+
+
+def service_block_id(service_id: str) -> str:
+    return SERVICE_BLOCK_PREFIX + service_id.lower()
+
+
+def _services_text(text: str, selection: dict[str, str], catalog: Catalog, *, ipv6: bool) -> tuple[str, int, list[str]]:
+    """Rewrite every service block; return (text, entries written, names left empty)."""
+    wanted = {service_block_id(sid) for sid in selection}
+    for block_id in summarize(text).blocks:
+        if block_id.startswith(SERVICE_BLOCK_PREFIX) and block_id not in wanted:
+            text = set_block(text, block_id, None)
+    written = 0
+    empty: list[str] = []
+    for service_id, profile_id in selection.items():
+        service = catalog.service(service_id)
+        rows = service_rows(catalog, service_id, profile_id, ipv6=ipv6) if service else []
+        if service and not rows:
+            empty.append(service.name)
+        text = set_block(text, service_block_id(service_id), rows)
+        written += len(rows)
+    return text, written, empty
+
+
+def apply_services(selection: dict[str, str]) -> tuple[bool, str]:
+    """Write the chosen services into hosts and remember the choice."""
+    try:
+        catalog = load_catalog()
+    except CatalogError as exc:
+        return False, f"Каталог сервисов недоступен: {exc}"
+    known = {sid: pid for sid, pid in selection.items() if catalog.service(sid)}
+    text, written, empty = _services_text(read_hosts(), known, catalog, ipv6=has_ipv6_route())
+    ok, error = _write(text, f"services applied: {len(known)} services, {written} entries")
+    if not ok:
+        return False, error
+    settings = get_settings()
+    settings.hosts_services = known
+    save_settings(settings)
+    message = f"Сервисы в hosts: {len(known)}, записей: {written}." if known else "Сервисы убраны из hosts."
+    if empty:
+        message += f" Без адресов (нужен IPv6?): {', '.join(empty)}."
+    return True, message
+
+
+def refresh_catalog_and_services(*, force: bool = False) -> tuple[bool, str]:
+    """Fetch a newer catalog when due and rewrite the chosen services with it."""
+    if not force and not catalog_check_due():
+        return True, ""
+    try:
+        changed, message = update_catalog()
+    except (CatalogError, httpx.HTTPError, OSError, ValueError) as exc:
+        warn("hosts", f"catalog update failed: {exc}")
+        return False, f"Не удалось обновить каталог сервисов: {exc}"
+    selection = get_settings().hosts_services
+    if changed and selection:
+        ok, applied = apply_services(selection)
+        return ok, f"{message} {applied}"
+    return True, message
+
+
 def restore_default() -> tuple[bool, str]:
     ok, error = _write(DEFAULT_HOSTS, "restored default hosts")
-    return (True, "Файл hosts восстановлен к стандартному виду Windows.") if ok else (False, error)
+    if not ok:
+        return False, error
+    _forget_services()
+    return True, "Файл hosts восстановлен к стандартному виду Windows."
 
 
 def restore_backup() -> tuple[bool, str]:
@@ -81,7 +150,18 @@ def restore_backup() -> tuple[bool, str]:
     if not backup.exists():
         return False, "Резервной копии нет: Tigo ещё не менял hosts."
     ok, error = _write(decode(backup.read_bytes()), "restored hosts backup")
-    return (True, "Файл hosts восстановлен из копии, снятой до первого изменения Tigo.") if ok else (False, error)
+    if not ok:
+        return False, error
+    _forget_services()
+    return True, "Файл hosts восстановлен из копии, снятой до первого изменения Tigo."
+
+
+def _forget_services() -> None:
+    """The file no longer has service blocks; keep the saved choice in step."""
+    settings = get_settings()
+    if settings.hosts_services:
+        settings.hosts_services = {}
+        save_settings(settings)
 
 
 def default_text_editor() -> str:

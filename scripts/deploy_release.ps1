@@ -75,7 +75,8 @@ $Required = @(
     (Join-Path $Standalone "Tigo.exe"),
     (Join-Path $Standalone "updater\TigoUpdate.exe"),
     (Join-Path $Standalone "flet_client\flet.exe"),
-    (Join-Path $Standalone "assets\icons\app.ico")
+    (Join-Path $Standalone "assets\icons\app.ico"),
+    (Join-Path $Standalone "assets\hosts\hosts_catalog.sqlite3")
 )
 foreach ($Path in $Required) {
     Assert-True (Test-Path $Path) "Required release file is missing: $Path"

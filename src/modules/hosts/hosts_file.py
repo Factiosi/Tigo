@@ -16,7 +16,7 @@ from src.core.debug_log import debug
 
 _BEGIN = "# >>> tigo:{} >>>"
 _END = "# <<< tigo:{} <<<"
-_BLOCK_LINE = re.compile(r"^# (>>>|<<<) tigo:([a-z0-9-]+) (>>>|<<<)$")
+_BLOCK_LINE = re.compile(r"^# (>>>|<<<) tigo:([a-z0-9._-]+) (>>>|<<<)$")
 
 DEFAULT_HOSTS = """\
 # Copyright (c) 1993-2009 Microsoft Corp.

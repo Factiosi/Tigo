@@ -57,7 +57,7 @@ src/
 │   ├── strategy_testing/ # daemon-раннер тестов, probe, cache результатов
 │   ├── updates/          # GitHub releases, transformer
 │   ├── filters/          # game filter, ipset, tcp timestamps
-│   └── hosts/            # hosts Windows: готовые наборы блоками `# >>> tigo:<id> >>>`, резервная копия
+│   └── hosts/            # hosts Windows: сервисы по каталогу, готовые наборы, резервная копия
 ├── update_splash/  # отдельный процесс окна обновления
 └── ui/
     ├── components/ # контролы без знания экрана
@@ -146,6 +146,13 @@ Kernel **не** парсит стратегии — только принима�
 ```bash
 python run.py
 ```
+
+## Редактор hosts
+
+- Tigo пишет в hosts только свои блоки `# >>> tigo:<id> >>>` … `# <<< tigo:<id> <<<`; чужие строки не трогает. Перед первой записью снимает копию `hosts.tigo.bak` рядом с файлом.
+- Сервисы — из каталога zapretgui (`hosts_catalog.sqlite3`, схема 1): у DNS-сервисов адреса по профилям (Zapret DNS, XBOX DNS…), у «прямых» — готовые записи. Снимок лежит в `assets/hosts/`, свежий — в `%APPDATA%\Tigo\cache\`; `catalog_update.py` берёт его из `update-manifest.json` последнего выпуска zapretgui и хранилища `<sha256>.zst` со сверкой суммы. Daemon проверяет раз в 6 часов на старте и переписывает выбранные сервисы.
+- Выбор хранится в `settings.hosts_services` (сервис → профиль). Один профиль на все сервисы; домен без ответа в нём берёт следующий профиль. Локальные адреса отбрасываются, IPv6 — только при маршруте в IPv6. Comss скрыт, как и на странице DNS.
+- SQLite открывать только через `closing(...)`: `with sqlite3.connect()` соединение не закрывает, и каталог потом не заменить.
 
 ## Что не трогать без запроса
 

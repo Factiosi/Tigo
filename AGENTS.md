@@ -149,7 +149,7 @@ python run.py
 
 ## Автоисключение по ошибке TLS
 
-Настройка `tls_auto_exclude` (по умолчанию включена). Если сервер отвечает на изменённый обходом ClientHello открытым фатальным TLS alert (`15 03 xx 00 02 02` — ERR_SSL_PROTOCOL_ERROR в браузере), домен уходит в `list-exclude-user.txt`, а для профилей без `--hostlist-exclude` (игровой фильтр, ipset) — адрес в `ipset-exclude-user.txt`.
+Настройка `tls_auto_exclude` (по умолчанию включена). Если сервер отвечает на изменённый обходом ClientHello открытым фатальным TLS alert (`15 03 xx 00 02 02`) или простым `HTTP/1.x 400` (так делает Tengine у aliexpress.ru: фейк доходит до сервера, тот читает мусор как HTTP) — в браузере это ERR_SSL_PROTOCOL_ERROR, — домен уходит в `list-exclude-user.txt`, а для профилей без `--hostlist-exclude` (игровой фильтр, ipset) — адрес в `ipset-exclude-user.txt`.
 
 - `inject_tls_watch` (`strategies/winws2.py`): `--wf-raw-part` перехватывает только такие входящие пакеты; `tigo_tls_watch` (`assets/lua/tigo-tls-watch.lua`) первым в каждом профиле с `--in-range=a`/`--out-range=x`, затем диапазоны сбрасываются. Отчёт — строка в `tls-alerts.txt` в каталоге `--writable` (`%APPDATA%\Tigo\cache\winws2`).
 - `modules/tls_exclude/watcher.py` в daemon раз в 2 с забирает файл (rename) и дописывает листы под пометкой `# Tigo: …`; winws2 перечитывает листы сам.

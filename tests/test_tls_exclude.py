@@ -38,10 +38,12 @@ class InjectTests(unittest.TestCase):
         init = result.index("--lua-init=@C:\\Tigo\\lua\\zapret-antidpi.lua")
         self.assertEqual(result[init + 1], f"--lua-init=@{SCRIPT}")
 
-    def test_filter_matches_only_plaintext_fatal_alerts(self) -> None:
+    def test_filter_matches_fatal_alerts_and_http_replies_off_port_80(self) -> None:
         self.assertIn("tcp.Payload[0] == 21", TLS_ALERT_FILTER)
         self.assertIn("tcp.Payload[5] == 2", TLS_ALERT_FILTER)
+        self.assertIn("tcp.SrcPort != 80 and tcp.Payload[0] == 72", TLS_ALERT_FILTER)  # "HTTP/"
         self.assertTrue(TLS_ALERT_FILTER.startswith("inbound and tcp"))
+        self.assertEqual(TLS_ALERT_FILTER.count("("), TLS_ALERT_FILTER.count(")"))
 
 
 class ReportTests(unittest.TestCase):

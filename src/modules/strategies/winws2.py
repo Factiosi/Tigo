@@ -610,11 +610,16 @@ def convert_winws1_argv(argv: list[str], *, lua_dir: Path) -> Winws2Args:
 
 
 TLS_WATCH_FUNCTION = "tigo_tls_watch"
-# Inbound plaintext fatal TLS alert: record 0x15, version 3.x, length 2, level 2.
-# Only these packets are diverted, so watching costs nothing on normal traffic.
+# Inbound replies that mean "the server could not parse our ClientHello":
+# a plaintext fatal TLS alert (record 0x15, version 3.x, length 2, level 2) or a
+# plain "HTTP/" answer from a non-HTTP port. Only these packets are diverted,
+# so watching costs nothing on normal traffic.
 TLS_ALERT_FILTER = (
-    "inbound and tcp and tcp.PayloadLength >= 7 and tcp.Payload[0] == 21 and tcp.Payload[1] == 3 "
-    "and tcp.Payload[3] == 0 and tcp.Payload[4] == 2 and tcp.Payload[5] == 2"
+    "inbound and tcp and tcp.PayloadLength >= 5 and ("
+    "(tcp.PayloadLength >= 7 and tcp.Payload[0] == 21 and tcp.Payload[1] == 3 "
+    "and tcp.Payload[3] == 0 and tcp.Payload[4] == 2 and tcp.Payload[5] == 2)"
+    " or (tcp.SrcPort != 80 and tcp.Payload[0] == 72 and tcp.Payload[1] == 84 "
+    "and tcp.Payload[2] == 84 and tcp.Payload[3] == 80 and tcp.Payload[4] == 47))"
 )
 _HOSTLIST_EXCLUDE = ("--hostlist-exclude=", "--hostlist-exclude-domains=")
 

@@ -52,6 +52,8 @@ class AppSettings:
     # hosts editor: catalog service id -> DNS profile id ("hosts" for direct entries)
     hosts_services: dict[str, str] = field(default_factory=dict)
     hosts_profile: str = "zapret_dns"
+    # Add domains/IPs to the user's exclude lists when a server rejects a desynced TLS handshake.
+    tls_auto_exclude: bool = True
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":

@@ -236,6 +236,15 @@ def cache_dir() -> Path:
     return app_data_root() / "cache"
 
 
+def winws2_writable_dir() -> Path:
+    """Directory winws2's Lua may write to (--writable); winws2 sets its access label."""
+    return cache_dir() / "winws2"
+
+
+def tls_watch_script() -> Path:
+    return program_root() / "assets" / "lua" / "tigo-tls-watch.lua"
+
+
 def test_results_cache_path() -> Path:
     return cache_dir() / "test_results.json"
 

@@ -20,6 +20,7 @@ from src.daemon.ui_launcher import close_all_gui, launch_gui, register_gui_pid
 from src.kernel.process_monitor import start_monitor, stop_monitor
 from src.kernel.public import get_runtime_status, initialize_runtime, start_custom_strategy, start_strategy, stop_strategy
 from src.modules.lifecycle.public import launch_last_strategy_if_configured
+from src.modules.tls_exclude.watcher import start_watcher as start_tls_exclude_watcher
 from src.modules.strategies.repository import bootstrap_user_lists, list_strategies
 from src.modules.updates.service import ensure_runtime_installed, run_startup_updates
 from src.modules.strategy_testing import results as test_results
@@ -41,6 +42,7 @@ class TigoDaemon:
     def run(self) -> None:
         info("daemon", f"starting {APP_NAME} daemon")
         get_settings()
+        start_tls_exclude_watcher()
         self._ipc.start()
         from src.core.process_label import set_process_description
 

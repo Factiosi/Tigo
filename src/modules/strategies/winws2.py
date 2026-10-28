@@ -609,6 +609,46 @@ def convert_winws1_argv(argv: list[str], *, lua_dir: Path) -> Winws2Args:
     return Winws2Args([*global_options, *blobs.options(), *_lua_init(lua_dir), *body], warnings)
 
 
+TLS_WATCH_FUNCTION = "tigo_tls_watch"
+# Inbound plaintext fatal TLS alert: record 0x15, version 3.x, length 2, level 2.
+# Only these packets are diverted, so watching costs nothing on normal traffic.
+TLS_ALERT_FILTER = (
+    "inbound and tcp and tcp.PayloadLength >= 7 and tcp.Payload[0] == 21 and tcp.Payload[1] == 3 "
+    "and tcp.Payload[3] == 0 and tcp.Payload[4] == 2 and tcp.Payload[5] == 2"
+)
+_HOSTLIST_EXCLUDE = ("--hostlist-exclude=", "--hostlist-exclude-domains=")
+
+
+def _split_profiles(argv: list[str]) -> list[list[str]]:
+    profiles: list[list[str]] = [[]]
+    for token in argv:
+        if token == "--new" or token.startswith("--new="):
+            profiles.append([token])
+        else:
+            profiles[-1].append(token)
+    return profiles
+
+
+def inject_tls_watch(argv: list[str], *, script: Path, writable_dir: Path) -> list[str]:
+    """Put tigo_tls_watch first into every profile and divert inbound TLS alerts.
+
+    A profile that cannot exclude by hostname (no --hostlist-exclude, e.g. the
+    game filter on ipset) reports the server address instead of the domain.
+    """
+    result = [
+        f"--writable={writable_dir}",
+        f"--wf-raw-part={TLS_ALERT_FILTER}",
+    ]
+    for index, profile in enumerate(_split_profiles(argv)):
+        head, body = (profile[:1], profile[1:]) if index else ([], profile)
+        by_ip = not any(token.startswith(_HOSTLIST_EXCLUDE) for token in body)
+        watch = f"--lua-desync={TLS_WATCH_FUNCTION}" + (":exclude=ip" if by_ip else "")
+        result += [*head, "--out-range=x", "--in-range=a", watch, "--in-range=x", "--out-range=a", *body]
+    last_init = max((i for i, token in enumerate(result) if token.startswith("--lua-init=")), default=-1)
+    result.insert(last_init + 1, f"--lua-init=@{script}")
+    return result
+
+
 def to_winws2_argv(argv: list[str], *, lua_dir: Path) -> Winws2Args:
     """Return winws2 arguments: native ones get the Lua library, winws1 ones are converted."""
     if not is_winws2_argv(argv):

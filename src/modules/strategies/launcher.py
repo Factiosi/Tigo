@@ -15,6 +15,8 @@ from src.core.paths import (
     lua_dir,
     missing_engine_files,
     program_root,
+    tls_watch_script,
+    winws2_writable_dir,
 )
 from src.core.settings import get_settings
 from src.kernel.launch_spec import WinwsLaunchSpec, tokenize_winws_args
@@ -23,7 +25,7 @@ from src.modules.filters.game_filter import ensure_game_filter_synced, get_game_
 from src.modules.filters.tcp import enable_tcp_timestamps
 from src.modules.strategies.models import Strategy
 from src.modules.strategies.parser import resolve_strategy_args
-from src.modules.strategies.winws2 import ConversionError, to_winws2_argv
+from src.modules.strategies.winws2 import ConversionError, inject_tls_watch, to_winws2_argv
 
 
 def _validate_assets(args: str) -> str | None:
@@ -51,14 +53,21 @@ def _engine_preflight() -> str | None:
     return None
 
 
-def _winws2_argv(args: str, *, label: str) -> tuple[list[str] | None, str | None]:
+def _winws2_argv(args: str, *, label: str, tls_watch: bool = True) -> tuple[list[str] | None, str | None]:
     try:
         result = to_winws2_argv(tokenize_winws_args(args), lua_dir=lua_dir())
     except ConversionError as exc:
         return None, f"Стратегию «{label}» не удалось перевести на winws2: {exc}"
     for message in result.warnings:
         warn("strategies", f"{label}: {message}")
-    return result.argv, None
+    argv = result.argv
+    script = tls_watch_script()
+    if tls_watch and get_settings().tls_auto_exclude and script.exists():
+        writable = winws2_writable_dir()
+        # winws2 creates only the last level of --writable.
+        writable.parent.mkdir(parents=True, exist_ok=True)
+        argv = inject_tls_watch(argv, script=script, writable_dir=writable)
+    return argv, None
 
 
 def ensure_runtime_preflight(*, version: str) -> tuple[bool, str]:
@@ -70,7 +79,10 @@ def ensure_runtime_preflight(*, version: str) -> tuple[bool, str]:
     return True, ""
 
 
-def build_winws_launch(strategy: Strategy, *, version: str | None = None) -> tuple[WinwsLaunchSpec | None, str | None]:
+def build_winws_launch(
+    strategy: Strategy, *, version: str | None = None, tls_watch: bool = True
+) -> tuple[WinwsLaunchSpec | None, str | None]:
+    """``tls_watch=False`` for strategy tests: a strategy under test must not edit the exclude lists."""
     settings = get_settings()
     ver = version or settings.active_version
     if not ver:
@@ -95,7 +107,7 @@ def build_winws_launch(strategy: Strategy, *, version: str | None = None) -> tup
     if missing:
         debug("strategies", missing, level="error")
         return None, missing
-    argv, error = _winws2_argv(args, label=strategy.display_name)
+    argv, error = _winws2_argv(args, label=strategy.display_name, tls_watch=tls_watch)
     if argv is None:
         debug("strategies", error or "", level="error")
         return None, error

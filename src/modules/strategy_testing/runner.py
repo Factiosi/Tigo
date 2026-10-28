@@ -302,7 +302,7 @@ class StrategyTestRunner:
             )
             tls.append("> Запуск стратегии…", level=tls.TestLogLevel.INFO)
 
-            spec, error = build_winws_launch(strategy, version=job.version)
+            spec, error = build_winws_launch(strategy, version=job.version, tls_watch=False)
             if error or spec is None:
                 msg = error or "Ошибка сборки команды."
                 tls.append(msg, level=tls.TestLogLevel.ERROR)

@@ -129,6 +129,20 @@ class SettingsPage:
             on_change=self._on_strategy_source_change,
         )
 
+        tls_exclude_cb = quiet_checkbox(
+            label="Автоматическое внесение доменов и IP в исключения при ошибке TLS",
+            value=settings.tls_auto_exclude,
+            label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
+            on_change=bind_select_dismiss(lambda e: self._on_tls_auto_exclude(bool(e.control.value))),
+        )
+        tls_exclude_hint = ui_text(
+            "Если сервер отвергает изменённое обходом TLS-рукопожатие (в браузере — ERR_SSL_PROTOCOL_ERROR), "
+            "домен попадает в list-exclude-user.txt, а для игровых и IP-профилей — адрес в ipset-exclude-user.txt. "
+            "Сайт откроется со следующей попытки.",
+            color=T.TEXT_MUTED,
+            size=12,
+        )
+
         sections: list[ft.Control] = [
             block_section("Оформление", theme_select),
             block_section(
@@ -138,7 +152,7 @@ class SettingsPage:
                 start_tray_cb,
                 close_select,
             ),
-            block_section("Стратегии", source_select),
+            block_section("Стратегии", source_select, tls_exclude_cb, tls_exclude_hint),
         ]
 
         if is_flowseal:
@@ -476,6 +490,21 @@ class SettingsPage:
             ok, msg = apply_autostart_setting(value)
             if not ok and msg:
                 self._snack(msg, error=True)
+
+    def _on_tls_auto_exclude(self, value: bool) -> None:
+        self._on_bool_setting("tls_auto_exclude", value)
+        if not get_effective_runtime_status().running:
+            return
+
+        def restart() -> None:
+            ok, msg = restart_if_running()
+            text = msg if not ok else "Обход перезапущен с новой настройкой."
+            try:
+                self.page.run_thread(lambda: self._snack(text, error=not ok))
+            except AttributeError:
+                self._snack(text, error=not ok)
+
+        threading.Thread(target=restart, daemon=True).start()
 
     def _on_close_action_change(self, value: str) -> None:
         settings = get_settings()

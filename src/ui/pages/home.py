@@ -45,10 +45,12 @@ from src.ui.notifications import show_toast
 from src.ui.strategy_status import strategy_status_pill
 
 CUSTOM_HINT = (
-    "Здесь можно указать свою стратегию. Пример верного заполнения: "
-    '"--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media". '
-    "Важно: в данном режиме путь к листам и бинарным файлам (фейкам) указывается полный, "
-    'т.е. "C:\\Users\\User\\Documents\\files\\lists\\list.txt".'
+    "Здесь можно указать свою стратегию в формате winws1 или winws2. Пример: "
+    '--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media. '
+    'Листы — полным путём: --hostlist="C:\\Users\\User\\Documents\\zapret\\list-general.txt", '
+    'или пользовательские листы Tigo: --hostlist="%LISTS%list-general-user.txt" '
+    "(также list-exclude-user.txt, ipset-exclude-user.txt). "
+    'Фейки Flowseal — "%BIN%имя.bin", порты игрового фильтра — %GameFilterTCP% и %GameFilterUDP%.'
 )
 
 

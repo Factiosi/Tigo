@@ -123,6 +123,26 @@ def build_winws_launch(
     return spec, None
 
 
+def resolve_custom_args(args: str) -> str:
+    """Same placeholders as Flowseal strategies: ``"%LISTS%list-general-user.txt"``.
+
+    %LISTS% points at the user lists for list-*-user.txt / ipset-exclude-user.txt
+    and at the active Flowseal version's lists otherwise; absolute paths stay as written.
+    """
+    settings = get_settings()
+    version = settings.active_version
+    game_tcp, game_udp = get_game_filter_ports(settings.game_filter)
+    return resolve_strategy_args(
+        args,
+        bin_dir=flowseal_fake_bin_dir(),
+        lists_dir=flowseal_version_lists_dir(version) if version else flowseal_user_lists_dir(),
+        user_lists_dir=flowseal_user_lists_dir(),
+        root_dir=program_root(),
+        game_filter_tcp=game_tcp,
+        game_filter_udp=game_udp,
+    )
+
+
 def build_custom_launch(args_text: str) -> tuple[WinwsLaunchSpec | None, str | None]:
     settings = get_settings()
     args = (args_text or settings.custom_strategy_args or "").strip()
@@ -132,6 +152,7 @@ def build_custom_launch(args_text: str) -> tuple[WinwsLaunchSpec | None, str | N
     error = _engine_preflight()
     if error:
         return None, error
+    args = resolve_custom_args(args)
     missing = _validate_assets(args)
     if missing:
         return None, missing

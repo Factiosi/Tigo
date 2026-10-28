@@ -205,7 +205,14 @@ def main(page: ft.Page) -> None:
             fit=ft.StackFit.EXPAND,
         )
     )
-    page.run_task(refresh, force_bottom=True)
-    page.run_task(poll_logs)
+    async def open_at_bottom() -> None:
+        # The first scroll lands before the window and the long text are laid out
+        # and does nothing; pin to the end again until the layout has settled.
+        for delay in (0.0, 0.1, 0.3, 0.8):
+            await asyncio.sleep(delay)
+            await refresh(force_bottom=True)
+
     page.window.visible = True
     page.update()
+    page.run_task(open_at_bottom)
+    page.run_task(poll_logs)

@@ -46,13 +46,14 @@ def build_nav_items() -> list[tuple[str, str, str]]:
         if has_flowseal_strategies(settings):
             items.append(("strategies", "Подбор стратегий", "flask-conical"))
         items.append(("lists", "Редактирование листов", "file-cog"))
-    items.extend(
-        [
-            ("dns", "Изменение DNS", "columns-3-cog"),
-            ("hosts", "Редактирование hosts", "server-cog"),
-            ("tg_ws_proxy", "TG WS Proxy", "send"),
-        ]
-    )
+    if settings.advanced_mode:
+        items.extend(
+            [
+                ("dns", "Изменение DNS", "columns-3-cog"),
+                ("hosts", "Редактирование hosts", "server-cog"),
+            ]
+        )
+    items.append(("tg_ws_proxy", "TG WS Proxy", "send"))
     return items
 
 
@@ -419,6 +420,8 @@ class TigoApp:
         route = getattr(self.page, "_tigo_route", self._route)
         settings = get_settings()
         if settings.strategy_source == "custom" and route in ("strategies", "lists"):
+            route = "home"
+        if not settings.advanced_mode and route in ("dns", "hosts"):
             route = "home"
         if route == "strategies" and not has_flowseal_strategies(settings):
             route = "home"

@@ -54,6 +54,8 @@ class AppSettings:
     hosts_profile: str = "zapret_dns"
     # Add domains/IPs to the user's exclude lists when a server rejects a desynced TLS handshake.
     tls_auto_exclude: bool = True
+    # Shows DNS, hosts and the strategy source; off on a fresh install.
+    advanced_mode: bool = False
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
@@ -70,6 +72,9 @@ class AppSettings:
         if data.get("version_retention") == "keep_n":
             data["version_retention"] = "keep_previous"
             data["keep_version_count"] = 2
+        # Settings written before advanced_mode existed belong to people used to
+        # the full interface; only a fresh install starts in the simple one.
+        data.setdefault("advanced_mode", True)
         known = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in data.items() if k in known}
         return cls(**filtered)

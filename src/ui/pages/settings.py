@@ -143,6 +143,19 @@ class SettingsPage:
             size=12,
         )
 
+        advanced_cb = quiet_checkbox(
+            label="Настройки для продвинутых пользователей",
+            value=settings.advanced_mode,
+            label_style=ft.TextStyle(font_family=T.FONT_FAMILY, color=T.TEXT),
+            on_change=bind_select_dismiss(lambda e: self._on_advanced_mode(bool(e.control.value))),
+        )
+        advanced_hint = ui_text(
+            "Открывает «Изменение DNS», «Редактирование hosts» и выбор источника стратегий, в том числе свою стратегию.",
+            color=T.TEXT_MUTED,
+            size=12,
+        )
+        strategy_controls: list[ft.Control] = [source_select] if settings.advanced_mode else []
+
         sections: list[ft.Control] = [
             block_section("Оформление", theme_select),
             block_section(
@@ -151,8 +164,10 @@ class SettingsPage:
                 launch_last_cb,
                 start_tray_cb,
                 close_select,
+                advanced_cb,
+                advanced_hint,
             ),
-            block_section("Стратегии", source_select, tls_exclude_cb, tls_exclude_hint),
+            block_section("Стратегии", *strategy_controls, tls_exclude_cb, tls_exclude_hint),
         ]
 
         if is_flowseal:
@@ -517,6 +532,27 @@ class SettingsPage:
         save_settings(settings)
         apply_theme(mode)
         self._on_theme_change()
+
+    def _on_advanced_mode(self, value: bool) -> None:
+        settings = get_settings()
+        settings.advanced_mode = value
+        # Without the advanced settings the strategy source is always Flowseal.
+        back_to_flowseal = not value and settings.strategy_source != "flowseal"
+        if back_to_flowseal:
+            settings.strategy_source = "flowseal"
+        save_settings(settings)
+        if back_to_flowseal and get_effective_runtime_status().running:
+
+            def restart() -> None:
+                ok, msg = restart_if_running()
+                if not ok:
+                    try:
+                        self.page.run_thread(lambda: self._snack(msg, error=True))
+                    except AttributeError:
+                        self._snack(msg, error=True)
+
+            threading.Thread(target=restart, daemon=True).start()
+        self._on_settings_change()
 
     def _on_strategy_source_change(self, value: str) -> None:
         settings = get_settings()
